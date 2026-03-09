@@ -282,30 +282,38 @@ export class DashboardService {
       const targetDateUtc = toUtcSql(rangeStart);
       const nextDayUtc = toUtcSql(rangeEnd);
 
-      // 공정별 전력/에어 합계 (FIRST/LAST: 가공/비가공 구분)
+      // 공정별 전력/에어 합계 — hourly CA 직접 조회 (VIEW 바이패스)
       const processData = await this.prisma.$queryRaw<any[]>`
         WITH tag_usage AS (
-          SELECT
-            c."tagId",
-            c."facilityId",
-            c.energy_type,
-            c.calc_method,
-            CASE WHEN c.calc_method = 'DIFF'
-              THEN LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) + SUM(COALESCE(c.reset_correction, 0))
-              ELSE SUM(c.usage_diff)
-            END as usage
-          FROM cagg_usage_combined_1min c
-          JOIN facilities f ON c."facilityId" = f.id
+          SELECT u."facilityId", u.energy_type,
+            LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+          FROM cagg_usage_1h u
+          JOIN facilities f ON u."facilityId" = f.id
           JOIN lines l ON f."lineId" = l.id
-          WHERE c.bucket >= ${targetDateUtc} AND c.bucket < ${nextDayUtc}
+          WHERE u.bucket >= ${targetDateUtc} AND u.bucket < ${nextDayUtc}
             ${lineCondition}
-          GROUP BY c."tagId", c."facilityId", c.energy_type, c.calc_method
+          GROUP BY u."facilityId", u.energy_type
+          UNION ALL
+          SELECT t."facilityId", t.energy_type,
+            SUM(CASE WHEN t.energy_type = 'elec'::"EnergyType" THEN t.sum_value / 60.0 ELSE t.sum_value END) as usage
+          FROM cagg_trend_usage_1h t
+          JOIN facilities f ON t."facilityId" = f.id
+          JOIN lines l ON f."lineId" = l.id
+          WHERE t.bucket >= ${targetDateUtc} AND t.bucket < ${nextDayUtc}
+            ${lineCondition}
+            AND EXISTS (
+              SELECT 1 FROM facility_energy_configs fec
+              WHERE fec."facilityId" = t."facilityId"
+                AND fec."energyType"::text = t.energy_type::text
+                AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
+            )
+          GROUP BY t."facilityId", t.energy_type
         )
         SELECT
           f.process,
           f."isProcessing",
-          SUM(CASE WHEN tu.energy_type = 'elec' THEN tu.usage ELSE 0 END) as power,
-          SUM(CASE WHEN tu.energy_type = 'air' THEN tu.usage ELSE 0 END) as air
+          SUM(CASE WHEN tu.energy_type::text = 'elec' THEN tu.usage ELSE 0 END) as power,
+          SUM(CASE WHEN tu.energy_type::text = 'air' THEN tu.usage ELSE 0 END) as air
         FROM tag_usage tu
         JOIN facilities f ON tu."facilityId" = f.id
         GROUP BY f.process, f."isProcessing"
