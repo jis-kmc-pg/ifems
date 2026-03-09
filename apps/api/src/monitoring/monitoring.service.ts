@@ -515,16 +515,188 @@ export class MonitoringService {
           GROUP BY 1, c.energy_type
           ORDER BY epoch
         `;
+      } else if (intervalSec >= 3600) {
+        // ============================================================
+        // 1시간 이상: hourly CA 직접 조회 (DIFF: LAST-FIRST, INTEGRAL_TRAP: SUM)
+        // ============================================================
+        currentData = await this.prisma.$queryRaw<any[]>`
+          WITH tag_usage AS (
+            SELECT u."tagId", u.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (u.bucket + ${KST_OFFSET} - date_trunc('day', u.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw} as epoch,
+              LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+            FROM cagg_usage_1h u
+            JOIN facilities f ON u."facilityId" = f.id
+            JOIN lines l ON f."lineId" = l.id
+            WHERE l.code = ${line.toUpperCase()}
+              AND u.bucket >= ${targetDateUtc} AND u.bucket < ${nextDayUtc}
+              AND EXISTS (
+                SELECT 1 FROM facility_energy_configs fec
+                WHERE fec."facilityId" = u."facilityId"
+                  AND fec."energyType"::text = u.energy_type::text
+                  AND fec."calcMethod"::text = 'DIFF' AND fec."isActive" = true
+              )
+            GROUP BY u."tagId", u.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (u.bucket + ${KST_OFFSET} - date_trunc('day', u.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw}
+            UNION ALL
+            SELECT t."tagId", t.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (t.bucket + ${KST_OFFSET} - date_trunc('day', t.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw} as epoch,
+              SUM(CASE WHEN t.energy_type = 'elec'::"EnergyType" THEN t.sum_value / 60.0 ELSE t.sum_value END) as usage
+            FROM cagg_trend_usage_1h t
+            JOIN facilities f ON t."facilityId" = f.id
+            JOIN lines l ON f."lineId" = l.id
+            WHERE l.code = ${line.toUpperCase()}
+              AND t.bucket >= ${targetDateUtc} AND t.bucket < ${nextDayUtc}
+              AND EXISTS (
+                SELECT 1 FROM facility_energy_configs fec
+                WHERE fec."facilityId" = t."facilityId"
+                  AND fec."energyType"::text = t.energy_type::text
+                  AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
+              )
+            GROUP BY t."tagId", t.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (t.bucket + ${KST_OFFSET} - date_trunc('day', t.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw}
+          )
+          SELECT
+            epoch,
+            energy_type::text as "energyType",
+            SUM(usage) as "avgValue"
+          FROM tag_usage
+          GROUP BY epoch, energy_type
+          ORDER BY epoch
+        `;
+
+        prevData = await this.prisma.$queryRaw<any[]>`
+          WITH tag_usage AS (
+            SELECT u."tagId", u.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (u.bucket + ${KST_OFFSET} - date_trunc('day', u.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw} as epoch,
+              LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+            FROM cagg_usage_1h u
+            JOIN facilities f ON u."facilityId" = f.id
+            JOIN lines l ON f."lineId" = l.id
+            WHERE l.code = ${line.toUpperCase()}
+              AND u.bucket >= ${prevDayUtc} AND u.bucket < ${targetDateUtc}
+              AND EXISTS (
+                SELECT 1 FROM facility_energy_configs fec
+                WHERE fec."facilityId" = u."facilityId"
+                  AND fec."energyType"::text = u.energy_type::text
+                  AND fec."calcMethod"::text = 'DIFF' AND fec."isActive" = true
+              )
+            GROUP BY u."tagId", u.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (u.bucket + ${KST_OFFSET} - date_trunc('day', u.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw}
+            UNION ALL
+            SELECT t."tagId", t.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (t.bucket + ${KST_OFFSET} - date_trunc('day', t.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw} as epoch,
+              SUM(CASE WHEN t.energy_type = 'elec'::"EnergyType" THEN t.sum_value / 60.0 ELSE t.sum_value END) as usage
+            FROM cagg_trend_usage_1h t
+            JOIN facilities f ON t."facilityId" = f.id
+            JOIN lines l ON f."lineId" = l.id
+            WHERE l.code = ${line.toUpperCase()}
+              AND t.bucket >= ${prevDayUtc} AND t.bucket < ${targetDateUtc}
+              AND EXISTS (
+                SELECT 1 FROM facility_energy_configs fec
+                WHERE fec."facilityId" = t."facilityId"
+                  AND fec."energyType"::text = t.energy_type::text
+                  AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
+              )
+            GROUP BY t."tagId", t.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (t.bucket + ${KST_OFFSET} - date_trunc('day', t.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw}
+          )
+          SELECT
+            epoch,
+            energy_type::text as "energyType",
+            SUM(usage) as "avgValue"
+          FROM tag_usage
+          GROUP BY epoch, energy_type
+          ORDER BY epoch
+        `;
+      } else if (intervalSec >= 900) {
+        // ============================================================
+        // 15분~30분: 15min CA 직접 조회 (DIFF: LAST-FIRST, INTEGRAL_TRAP: SUM)
+        // ============================================================
+        currentData = await this.prisma.$queryRaw<any[]>`
+          WITH tag_usage AS (
+            SELECT u."tagId", u.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (u.bucket + ${KST_OFFSET} - date_trunc('day', u.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw} as epoch,
+              LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+            FROM cagg_usage_15min u
+            JOIN facilities f ON u."facilityId" = f.id
+            JOIN lines l ON f."lineId" = l.id
+            WHERE l.code = ${line.toUpperCase()}
+              AND u.bucket >= ${targetDateUtc} AND u.bucket < ${nextDayUtc}
+            GROUP BY u."tagId", u.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (u.bucket + ${KST_OFFSET} - date_trunc('day', u.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw}
+            UNION ALL
+            SELECT t."tagId", t.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (t.bucket + ${KST_OFFSET} - date_trunc('day', t.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw} as epoch,
+              SUM(CASE WHEN t.energy_type = 'elec'::"EnergyType" THEN t.sum_value / 60.0 ELSE t.sum_value END) as usage
+            FROM cagg_trend_usage_15min t
+            JOIN facilities f ON t."facilityId" = f.id
+            JOIN lines l ON f."lineId" = l.id
+            WHERE l.code = ${line.toUpperCase()}
+              AND t.bucket >= ${targetDateUtc} AND t.bucket < ${nextDayUtc}
+              AND EXISTS (
+                SELECT 1 FROM facility_energy_configs fec
+                WHERE fec."facilityId" = t."facilityId"
+                  AND fec."energyType"::text = t.energy_type::text
+                  AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
+              )
+            GROUP BY t."tagId", t.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (t.bucket + ${KST_OFFSET} - date_trunc('day', t.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw}
+          )
+          SELECT
+            epoch,
+            energy_type::text as "energyType",
+            SUM(usage) as "avgValue"
+          FROM tag_usage
+          GROUP BY epoch, energy_type
+          ORDER BY epoch
+        `;
+
+        prevData = await this.prisma.$queryRaw<any[]>`
+          WITH tag_usage AS (
+            SELECT u."tagId", u.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (u.bucket + ${KST_OFFSET} - date_trunc('day', u.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw} as epoch,
+              LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+            FROM cagg_usage_15min u
+            JOIN facilities f ON u."facilityId" = f.id
+            JOIN lines l ON f."lineId" = l.id
+            WHERE l.code = ${line.toUpperCase()}
+              AND u.bucket >= ${prevDayUtc} AND u.bucket < ${targetDateUtc}
+            GROUP BY u."tagId", u.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (u.bucket + ${KST_OFFSET} - date_trunc('day', u.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw}
+            UNION ALL
+            SELECT t."tagId", t.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (t.bucket + ${KST_OFFSET} - date_trunc('day', t.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw} as epoch,
+              SUM(CASE WHEN t.energy_type = 'elec'::"EnergyType" THEN t.sum_value / 60.0 ELSE t.sum_value END) as usage
+            FROM cagg_trend_usage_15min t
+            JOIN facilities f ON t."facilityId" = f.id
+            JOIN lines l ON f."lineId" = l.id
+            WHERE l.code = ${line.toUpperCase()}
+              AND t.bucket >= ${prevDayUtc} AND t.bucket < ${targetDateUtc}
+              AND EXISTS (
+                SELECT 1 FROM facility_energy_configs fec
+                WHERE fec."facilityId" = t."facilityId"
+                  AND fec."energyType"::text = t.energy_type::text
+                  AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
+              )
+            GROUP BY t."tagId", t.energy_type,
+              FLOOR(EXTRACT(EPOCH FROM (t.bucket + ${KST_OFFSET} - date_trunc('day', t.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw}
+          )
+          SELECT
+            epoch,
+            energy_type::text as "energyType",
+            SUM(usage) as "avgValue"
+          FROM tag_usage
+          GROUP BY epoch, energy_type
+          ORDER BY epoch
+        `;
       } else {
         // ============================================================
-        // 1분 이상: FIRST/LAST + INTEGRAL_TRAP 통합 (cagg_usage_combined_1min)
+        // 1분~5분: VIEW 기반 (cagg_usage_combined_1min) — 병렬 실행 최적
         // ============================================================
         currentData = await this.prisma.$queryRaw<any[]>`
           WITH tag_usage AS (
             SELECT
-              c."tagId",
-              c.energy_type,
-              c.calc_method,
+              c."tagId", c.energy_type, c.calc_method,
               FLOOR(EXTRACT(EPOCH FROM (c.bucket + ${KST_OFFSET} - date_trunc('day', c.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw} as epoch,
               CASE WHEN c.calc_method = 'DIFF'
                 THEN LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) + SUM(COALESCE(c.reset_correction, 0))
@@ -538,10 +710,7 @@ export class MonitoringService {
             GROUP BY c."tagId", c.energy_type, c.calc_method,
               FLOOR(EXTRACT(EPOCH FROM (c.bucket + ${KST_OFFSET} - date_trunc('day', c.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw}
           )
-          SELECT
-            epoch,
-            energy_type as "energyType",
-            SUM(usage) as "avgValue"
+          SELECT epoch, energy_type as "energyType", SUM(usage) as "avgValue"
           FROM tag_usage
           GROUP BY epoch, energy_type
           ORDER BY epoch
@@ -550,9 +719,7 @@ export class MonitoringService {
         prevData = await this.prisma.$queryRaw<any[]>`
           WITH tag_usage AS (
             SELECT
-              c."tagId",
-              c.energy_type,
-              c.calc_method,
+              c."tagId", c.energy_type, c.calc_method,
               FLOOR(EXTRACT(EPOCH FROM (c.bucket + ${KST_OFFSET} - date_trunc('day', c.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw} as epoch,
               CASE WHEN c.calc_method = 'DIFF'
                 THEN LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) + SUM(COALESCE(c.reset_correction, 0))
@@ -566,10 +733,7 @@ export class MonitoringService {
             GROUP BY c."tagId", c.energy_type, c.calc_method,
               FLOOR(EXTRACT(EPOCH FROM (c.bucket + ${KST_OFFSET} - date_trunc('day', c.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw}
           )
-          SELECT
-            epoch,
-            energy_type as "energyType",
-            SUM(usage) as "avgValue"
+          SELECT epoch, energy_type as "energyType", SUM(usage) as "avgValue"
           FROM tag_usage
           GROUP BY epoch, energy_type
           ORDER BY epoch
