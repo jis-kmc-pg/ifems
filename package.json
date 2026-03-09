@@ -1,0 +1,25 @@
+{
+  "name": "ifems",
+  "version": "1.0.0",
+  "description": "Intelligence Facility & Energy Management System - 화성 PT4공장",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter @ifems/web dev\" \"pnpm --filter @ifems/api start:dev\"",
+    "dev:web": "pnpm --filter @ifems/web dev",
+    "dev:api": "pnpm --filter @ifems/api start:dev",
+    "build": "pnpm --filter @ifems/shared build && pnpm --filter @ifems/web build && pnpm --filter @ifems/api build",
+    "build:web": "pnpm --filter @ifems/web build",
+    "build:api": "pnpm --filter @ifems/api build",
+    "lint": "pnpm -r lint",
+    "type-check": "pnpm -r type-check"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "typescript": "^5.7.0",
+    "xlsx": "^0.18.5"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

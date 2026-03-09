@@ -1,0 +1,120 @@
+import { PrismaClient, Line, FacilityStatus } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
+
+const prisma = new PrismaClient({
+  log: ['query', 'info', 'warn', 'error'],
+});
+
+const LINE_MAP: Record<string, Line> = {
+  block: 'BLOCK',
+  head: 'HEAD',
+  crank: 'CRANK',
+  assemble: 'ASSEMBLE',
+};
+
+const STATUS_MAP: Record<string, FacilityStatus> = {
+  NORMAL: 'NORMAL',
+  WARNING: 'WARNING',
+  DANGER: 'DANGER',
+  OFFLINE: 'OFFLINE',
+};
+
+async function main() {
+  console.log('🌱 Starting seed...');
+  console.log('📍 DATABASE_URL:', process.env.DATABASE_URL);
+
+  // 기존 데이터 정리
+  console.log('🗑️  Cleaning existing data...');
+  await prisma.energyTimeseries.deleteMany();
+  await prisma.tagDataRaw.deleteMany();
+  await prisma.tag.deleteMany();
+  await prisma.facility.deleteMany();
+  console.log('✅ Existing data cleared\n');
+
+  // temp_facilities.json에서 전체 설비 데이터 로드
+  const facilitiesJsonPath = path.join(__dirname, '../../../temp_facilities.json');
+  const facilitiesData = JSON.parse(fs.readFileSync(facilitiesJsonPath, 'utf8'));
+
+  console.log(`📦 Inserting ${facilitiesData.length} facilities...`);
+
+  // 설비 데이터 삽입
+  let inserted = 0;
+  for (const facility of facilitiesData) {
+    await prisma.facility.create({
+      data: {
+        code: facility.code,
+        name: facility.name,
+        line: LINE_MAP[facility.line],
+        process: facility.process || 'OP0',
+        type: facility.type,
+        status: STATUS_MAP[facility.status] || FacilityStatus.NORMAL,
+        isProcessing: facility.isProcessing,
+      },
+    });
+    inserted++;
+    if (inserted % 50 === 0) {
+      console.log(`  ✓ ${inserted} facilities inserted...`);
+    }
+  }
+
+  console.log(`\n✅ ${inserted} facilities inserted successfully!`);
+
+  // 통계 출력
+  const stats = await prisma.facility.groupBy({
+    by: ['line'],
+    _count: true,
+  });
+
+  console.log('\n📊 Facility Statistics:');
+  stats.forEach((stat) => {
+    console.log(`  ${stat.line.padEnd(10)}: ${stat._count} facilities`);
+  });
+
+  // 샘플 에너지 시계열 데이터 삽입 (최근 24시간, 15분 간격)
+  console.log('\n📊 Creating sample energy data...');
+  const facilities = await prisma.facility.findMany();
+  const now = new Date();
+  const energyData = [];
+
+  for (const facility of facilities) {
+    // 최근 24시간, 15분 간격 = 96개 데이터 포인트
+    for (let i = 0; i < 96; i++) {
+      const timestamp = new Date(now.getTime() - i * 15 * 60 * 1000);
+
+      // 설비별 기본 에너지 사용량 (가공기 > 유틸리티)
+      const basePower = facility.isProcessing ? 200 + Math.random() * 300 : 50 + Math.random() * 150;
+      const baseAir = facility.isProcessing ? 15000 + Math.random() * 20000 : 0;
+
+      energyData.push({
+        timestamp,
+        facilityId: facility.id,
+        powerKwh: basePower / 4,
+        powerPeak: basePower * (1 + Math.random() * 0.2),
+        voltage: 220 + Math.random() * 5,
+        current: basePower / 220,
+        imbalance: Math.random() * 10,
+        powerFactor: 0.85 + Math.random() * 0.1,
+        frequency: 60 + Math.random() * 0.5,
+        airL: baseAir / 4,
+        airPressure: 6 + Math.random() * 2,
+        airFlow: baseAir / 15 / 60,
+        status: Math.random() > 0.9 ? FacilityStatus.WARNING : FacilityStatus.NORMAL,
+      });
+    }
+  }
+
+  await prisma.energyTimeseries.createMany({ data: energyData });
+  console.log(`✅ Created ${energyData.length} energy timeseries data points\n`);
+
+  console.log('🎉 Seed completed!\n');
+}
+
+main()
+  .catch((e) => {
+    console.error('❌ Seed failed:', e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

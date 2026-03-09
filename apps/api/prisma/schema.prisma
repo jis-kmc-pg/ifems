@@ -1,0 +1,527 @@
+// i-FEMS Prisma Schema
+// 화성 PT4공장 Intelligence Facility & Energy Management System
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// 1. 마스터 테이블 (계층 구조: Factory → Line → Facility → Tag)
+// ============================================================
+
+// 공장 (Factory)
+model Factory {
+  id        String   @id @default(uuid())
+  code      String   @unique // hw4
+  name      String // 4공장
+  fullName  String? // 화성PT4공장
+  location  String? // 경기도 화성시
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines Line[]
+
+  @@map("factories")
+}
+
+// 라인 (Line)
+model Line {
+  id        String   @id @default(uuid())
+  code      String   @unique // BLOCK, HEAD, CRANK, ASSEMBLE
+  name      String // 블록, 헤드, 크랑크, 조립
+  factoryId String
+  factory   Factory  @relation(fields: [factoryId], references: [id], onDelete: Cascade)
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  facilities             Facility[]
+  nonProductionSchedules NonProductionSchedule[]
+  productionCalendar     ProductionCalendar[]
+
+  @@index([factoryId])
+  @@map("lines")
+}
+
+enum FacilityStatus {
+  NORMAL
+  WARNING
+  DANGER
+  OFFLINE
+}
+
+// 설비 유형 (FacilityType) - Phase 2
+model FacilityType {
+  id          String   @id @default(uuid())
+  code        String   @unique @db.VarChar(50)
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+  color       String?  @db.VarChar(7) // Hex color (예: #FF5733)
+  icon        String?  @db.VarChar(50) // lucide-react icon name
+  isActive    Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  facilities Facility[]
+
+  @@map("facility_types")
+}
+
+// 설비 (Facility)
+model Facility {
+  id           String         @id @default(uuid())
+  code         String         @unique // HNK10-020
+  name         String // HNK10-020 OP20
+  lineId       String
+  line         Line           @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  typeId       String? // Phase 2: FK to FacilityType
+  facilityType FacilityType?  @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  process      String? // OP10, OP20, etc.
+  type         String // MC, COMPRESSOR, COOLING, etc.
+  status       FacilityStatus @default(NORMAL)
+  isProcessing Boolean        @default(true)
+  latitude     Float?
+  longitude    Float?
+  metadata     Json? // For storing threshold settings and other facility-specific data
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  // Relations
+  tags              Tag[]
+  energyData        EnergyTimeseries[]
+  energyConfigs     FacilityEnergyConfig[]
+  fromReassignments TagReassignmentLog[] @relation("FromFacility")
+  toReassignments   TagReassignmentLog[] @relation("ToFacility")
+  alerts            Alert[]
+  cycles            CycleData[]
+  referenceCycle    ReferenceCycle?
+
+  @@index([lineId])
+  @@index([typeId])
+  @@index([status])
+  @@map("facilities")
+}
+
+// ============================================================
+// 2. 태그 시스템
+// ============================================================
+
+// 측정 방식 (물리적 측정 특성)
+enum MeasureType {
+  INSTANTANEOUS // 순시값 (특정 시점의 즉시 측정)
+  CUMULATIVE    // 적산값 (시간에 따라 누적)
+  DISCRETE      // 이산값 (0/1, 유한 상태)
+}
+
+// 도메인 용도 (왜 측정하는가?)
+enum TagCategory {
+  ENERGY      // 에너지 생산/소비 (전력, 에어, 가스)
+  QUALITY     // 에너지 품질 지표 (불평형률, 역률, 고조파)
+  ENVIRONMENT // 설비 주변 환경 (온도, 습도, 압력)
+  OPERATION   // 설비 운전 상태 (가동/정지, 가동시간)
+  CONTROL     // 설정/제어값 (목표온도, 설정압력)
+}
+
+enum EnergyType {
+  elec  // 전력
+  air   // 에어
+  gas   // 가스
+  solar // 태양광
+}
+
+// 사용량 계산 방식
+enum CalcMethod {
+  DIFF           // 적산 태그의 차분 (end - start)
+  INTEGRAL_TRAP  // 순시 태그의 사다리꼴 적분
+}
+
+// 태그 (Tag)
+model Tag {
+  id          String      @id @default(uuid())
+  facilityId  String
+  facility    Facility    @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  tagName     String      @unique // HNK10_010_1_POWER_1 (원본 태그명)
+  displayName String // 전력 사용량 (UI 표시명)
+  measureType MeasureType // INSTANTANEOUS, CUMULATIVE, DISCRETE
+  category    TagCategory // ENERGY, QUALITY, ENVIRONMENT, OPERATION, CONTROL
+  energyType  EnergyType? // elec, air, gas, solar (category=ENERGY일 때만)
+  unit        String? // kWh, m³, ℃
+  order       Int         @default(0)
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  dataPoints       TagDataRaw[]
+  reassignmentLogs TagReassignmentLog[] // Phase 2: Audit logs
+  resetEvents      MeterResetEvent[]    // 리셋 이벤트
+  usageConfigTags  FacilityEnergyConfigTag[] @relation("UsageSourceTag")
+
+  @@index([facilityId])
+  @@index([measureType])
+  @@index([category])
+  @@index([energyType])
+  @@map("tags")
+}
+
+// 태그 재할당 이력 (TagReassignmentLog) - Phase 2
+model TagReassignmentLog {
+  id             String   @id @default(uuid())
+  tagId          String
+  fromFacilityId String
+  toFacilityId   String
+  reason         String?  @db.Text
+  reassignedBy   String?  @db.VarChar(100) // 사용자 이름 (향후 Auth 연동)
+  reassignedAt   DateTime @default(now())
+
+  tag          Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  fromFacility Facility @relation("FromFacility", fields: [fromFacilityId], references: [id])
+  toFacility   Facility @relation("ToFacility", fields: [toFacilityId], references: [id])
+
+  @@index([tagId])
+  @@index([fromFacilityId])
+  @@index([toFacilityId])
+  @@map("tag_reassignment_logs")
+}
+
+// 계측기 리셋/이상 이벤트 (MeterResetEvent)
+model MeterResetEvent {
+  id                  String   @id @default(uuid())
+  tagId               String   @map("tag_id")
+  resetTime           DateTime @map("reset_time") @db.Timestamptz
+  valueBeforeReset    Float    @map("value_before_reset")
+  valueAfterReset     Float?   @map("value_after_reset")
+  detectionMethod     String   @default("auto") @map("detection_method") @db.VarChar(20) // 'auto' or 'manual'
+  correctionApplied   Boolean  @default(true) @map("correction_applied")
+  notes               String?  @db.Text
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  // 이상 데이터 감지 확장 컬럼
+  eventType           String   @default("reset") @map("event_type") @db.VarChar(20) // 'reset' | 'anomaly'
+  deviationMultiplier Float?   @map("deviation_multiplier") // 이상 발생 시 실제 배율 (예: 7.3)
+  replacementValue    Float?   @map("replacement_value")    // 대체값 (직전 정상값 또는 NULL)
+  consecutiveCount    Int?     @map("consecutive_count")    // 연속 이상 횟수
+
+  tag Tag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([tagId, resetTime])
+  @@index([tagId, resetTime])
+  @@index([resetTime])
+  @@index([eventType])
+  @@map("meter_reset_events")
+}
+
+// ============================================================
+// 3. 시계열 데이터 (TimescaleDB Hypertable)
+// ============================================================
+
+enum DataQuality {
+  GOOD
+  BAD
+  UNCERTAIN
+}
+
+// 태그 원본 데이터 (1초~1분 단위)
+// TimescaleDB Hypertable: timestamp를 파티셔닝 키로 사용
+model TagDataRaw {
+  timestamp DateTime // 수집 시각 (TimescaleDB 파티셔닝 키)
+  tagId     String
+  tag       Tag      @relation(fields: [tagId], references: [id])
+
+  // Key-Value 데이터
+  numericValue Float?
+  stringValue  String?
+  booleanValue Boolean?
+
+  // 품질
+  quality     DataQuality @default(GOOD)
+  collectorId String? // PLC/SCADA 구분
+
+  @@id([timestamp, tagId]) // Composite Primary Key for TimescaleDB
+  @@map("tag_data_raw")
+}
+
+// 집계 데이터 (15분 단위)
+model EnergyTimeseries {
+  id         String   @id @default(uuid())
+  timestamp  DateTime // 15분 단위
+  facilityId String
+  facility   Facility @relation(fields: [facilityId], references: [id])
+
+  // 전력 데이터
+  powerKwh    Float? // 전력 사용량 (kWh) - 데이터 없으면 null
+  powerPeak   Float? // 피크 전력 (kW)
+  voltage     Float?
+  current     Float?
+  imbalance   Float? // 불평형률 (%)
+  powerFactor Float? // 역률 (%)
+  frequency   Float? // 주파수 (Hz)
+
+  // 에어 데이터
+  airL        Float? // 에어 사용량 (L)
+  airPressure Float?
+  airFlow     Float?
+
+  // 상태
+  status FacilityStatus @default(NORMAL)
+
+  @@index([timestamp, facilityId])
+  @@map("energy_timeseries")
+}
+
+// ============================================================
+// 4. 알림 시스템 (Alerts)
+// ============================================================
+
+enum AlertSeverity {
+  NORMAL
+  WARNING
+  DANGER
+}
+
+enum AlertType {
+  POWER_QUALITY // 전력 품질 (불평형률, 역률)
+  AIR_LEAK // 에어 누기
+  CYCLE_ANOMALY // 싸이클 이상
+  ENERGY_SPIKE // 에너지 급증
+  THRESHOLD // 임계값 초과
+}
+
+model Alert {
+  id         String   @id @default(uuid())
+  facilityId String
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  severity AlertSeverity
+  type     AlertType
+  message  String        @db.Text
+
+  // 측정값
+  value     Float?
+  threshold Float?
+  unit      String? // kWh, %, m³
+
+  // 상세 데이터 (JSON)
+  metadata Json? // { imbalance: 5.2, powerFactor: 0.85, ... }
+
+  // 조치사항
+  actionTaken   String?   @db.Text
+  actionTakenBy String?   @db.VarChar(100)
+  actionTakenAt DateTime?
+
+  // 확인 처리
+  acknowledgedBy String?   @db.VarChar(100)
+  acknowledgedAt DateTime?
+
+  // 타임스탬프
+  detectedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([facilityId, detectedAt])
+  @@index([severity, type])
+  @@index([detectedAt])
+  @@map("alerts")
+}
+
+// ============================================================
+// 5. 싸이클 분석 (Cycle Analysis)
+// ============================================================
+
+enum CycleStatus {
+  NORMAL
+  DELAYED
+  ANOMALY
+  INCOMPLETE
+}
+
+// 싸이클 데이터
+model CycleData {
+  id         String   @id @default(uuid())
+  facilityId String
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  cycleNumber Int // 싸이클 번호 (1, 2, 3, ...)
+  startTime   DateTime
+  endTime     DateTime?
+  duration    Float? // 초 (실제 소요 시간)
+
+  // 파형 데이터 (JSON Array)
+  waveform Json // [{sec: 0.0, power: 12.5}, {sec: 0.1, power: 13.2}, ...]
+
+  // 통계
+  peakPower   Float? // kW (최대 전력)
+  avgPower    Float? // kW (평균 전력)
+  totalEnergy Float? // kWh (총 에너지)
+
+  // 상태
+  status CycleStatus @default(NORMAL)
+  delay  Float? // 지연 시간 (초, 기준 대비)
+
+  // 메타데이터
+  metadata Json? // { temp: 85.3, pressure: 6.5, ... }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([facilityId, startTime])
+  @@index([cycleNumber])
+  @@index([status])
+  @@map("cycle_data")
+}
+
+// 기준 싸이클 (Reference Cycle)
+model ReferenceCycle {
+  id         String   @id @default(uuid())
+  facilityId String   @unique
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+
+  // 기준 파형 데이터
+  waveform Json // [{sec: 0.0, power: 12.5}, ...]
+  duration Float // 기준 소요 시간 (초)
+
+  // 메타데이터
+  description String?  @db.Text
+  uploadedBy  String?  @db.VarChar(100)
+  uploadedAt  DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("reference_cycles")
+}
+
+// ============================================================
+// 6. 에너지 사용량 계산 소스 매핑
+// ============================================================
+
+// 설비별 에너지 사용량 계산 헤더 (설비당 energyType별 1행)
+model FacilityEnergyConfig {
+  id          String     @id @default(uuid())
+  facilityId  String
+  facility    Facility   @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  energyType  EnergyType // elec | air
+  calcMethod  CalcMethod // DIFF(적산) | INTEGRAL_TRAP(순시)
+
+  // 관리
+  description  String?  @db.Text
+  configuredBy String?  @db.VarChar(100)
+  needsReview  Boolean  @default(false) // INTEGRAL_TRAP인 경우 관리자 확인 필요
+  isActive     Boolean  @default(true)
+  since        DateTime @default(now()) // 적용 시작일
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // 태그 매핑 상세
+  configTags   FacilityEnergyConfigTag[]
+
+  @@unique([facilityId, energyType])
+  @@index([facilityId])
+  @@map("facility_energy_configs")
+}
+
+// 에너지 소스 태그 매핑 상세 (config당 복수 태그)
+model FacilityEnergyConfigTag {
+  id        String  @id @default(uuid())
+  configId  String
+  config    FacilityEnergyConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  tagId     String
+  tag       Tag     @relation("UsageSourceTag", fields: [tagId], references: [id])
+  isActive  Boolean @default(true)
+  order     Int     @default(0)
+
+  @@unique([configId, tagId])
+  @@index([configId])
+  @@index([tagId])
+  @@map("facility_energy_config_tags")
+}
+
+// ============================================================
+// 7. 비생산시간 설정 (Non-Production Schedule & Calendar)
+// ============================================================
+
+enum DayType {
+  weekday
+  saturday
+  sunday
+}
+
+// 비생산시간 정기 스케줄 (라인별 요일 유형별)
+model NonProductionSchedule {
+  id        String   @id @default(uuid())
+  lineId    String
+  line      Line     @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  dayType   DayType  // weekday, saturday, sunday
+  startTime String   @db.VarChar(5) // "18:00" (HH:mm)
+  endTime   String   @db.VarChar(5) // "08:00" (HH:mm)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([lineId, dayType])
+  @@index([lineId])
+  @@map("non_production_schedules")
+}
+
+enum CalendarType {
+  holiday  // 공휴일/기념일 (전체 비생산)
+  workday  // 특근일 (비생산 → 생산 전환)
+  shutdown // 정기보전/셧다운 (전체 비생산)
+}
+
+// 생산 캘린더 (날짜별 예외)
+model ProductionCalendar {
+  id          String       @id @default(uuid())
+  lineId      String?      // NULL이면 전체 공장 적용
+  line        Line?        @relation(fields: [lineId], references: [id], onDelete: Cascade)
+  date        DateTime     @db.Date
+  type        CalendarType // holiday, workday, shutdown
+  description String?      @db.VarChar(100)
+  createdAt   DateTime     @default(now())
+
+  @@unique([lineId, date])
+  @@index([date])
+  @@index([lineId])
+  @@map("production_calendar")
+}
+
+// 사용량 계산 소스 변경 이력 (데이터 연속성 추적)
+model FacilityEnergyConfigHistory {
+  id             String      @id @default(uuid())
+  facilityId     String
+  energyType     EnergyType
+
+  // 변경 내용
+  action         String      @default("UPDATE") @db.VarChar(20) // UPDATE, TAG_ADD, TAG_REMOVE
+  prevCalcMethod CalcMethod?
+  newCalcMethod  CalcMethod?
+  tagId          String?     // 추가/제거된 태그
+  tagName        String?     @db.VarChar(200) // 태그명 스냅샷
+
+  // 메타
+  reason    String?  @db.Text
+  changedBy String?  @db.VarChar(100)
+  changedAt DateTime @default(now())
+
+  @@index([facilityId, changedAt])
+  @@map("facility_energy_config_histories")
+}
+
+// ============================================================
+// 시스템 설정 (key-value)
+// ============================================================
+model SystemSetting {
+  key         String   @id @db.VarChar(100)
+  value       Json     // 값 (타입별 JSON)
+  description String?  @db.VarChar(500)
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_settings")
+}

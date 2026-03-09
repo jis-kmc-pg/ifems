@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+/* ============================================================
+   i-FEMS Design System Tokens
+   화성 PT4공장 설비·에너지 관리시스템
+   ============================================================ */
+@theme {
+  /* Brand Colors - CLAUDE.md 산업 표준 (24/7 모니터링 최적화) */
+  --color-navy: #1A1A2E;           /* GNB 다크 네이비 */
+  --color-navy-light: #16213E;     /* 카드/사이드바 배경 */
+  --color-navy-dark: #0F1419;      /* 진한 네이비 */
+  --color-accent: #E94560;         /* Primary 액센트 (레드) */
+  --color-accent-hover: #C73B52;   /* 진한 레드 (hover) */
+
+  /* Status Colors - CLAUDE.md 신호등 표준 */
+  --color-status-normal: #27AE60;  /* 정상 (초록) */
+  --color-status-warning: #F39C12; /* 주의 (노랑) */
+  --color-status-danger: #E74C3C;  /* 위험 (빨강) */
+  --color-status-offline: #7F8C8D; /* 오프라인 (회색) */
+
+  /* Chart Colors - 에너지 전용 */
+  --color-chart-primary: #FDB813;   /* 전력 (노란색) */
+  --color-chart-secondary: #2E86DE; /* 에어 (파란색) */
+  --color-chart-tertiary: #27AE60;  /* 정상 */
+  --color-chart-quaternary: #E74C3C;/* 위험 */
+  --color-chart-overlay: rgba(253, 184, 19, 0.15);
+
+  /* Font Sizes - 기본 대비 3px 증가 */
+  --font-size-xs: 0.9375rem;     /* 15px (12px + 3px) */
+  --font-size-sm: 1.0625rem;     /* 17px (14px + 3px) */
+  --font-size-base: 1.1875rem;   /* 19px (16px + 3px) */
+  --font-size-lg: 1.3125rem;     /* 21px (18px + 3px) */
+  --font-size-xl: 1.4375rem;     /* 23px (20px + 3px) */
+  --font-size-2xl: 1.6875rem;    /* 27px (24px + 3px) */
+
+  /* Sidebar */
+  --sidebar-width: 200px;
+  --sidebar-width-collapsed: 56px;
+  --gnb-height: 56px;
+}
+
+/* Base Styles */
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Noto Sans KR', 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 19px; /* 기본 16px + 3px */
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f1f1f1; }
+::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+
+/* Dark mode scrollbar */
+.dark ::-webkit-scrollbar-track { background: #1e2a3a; }
+.dark ::-webkit-scrollbar-thumb { background: #4a5568; }
+
+/* Status Badge - CLAUDE.md 표준 */
+.status-normal { background-color: #27AE60; color: white; }
+.status-warning { background-color: #F39C12; color: white; }
+.status-danger { background-color: #E74C3C; color: white; }
+.status-offline { background-color: #7F8C8D; color: white; }
+
+/* Recharts Custom */
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: rgba(26, 26, 46, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+}
+
+/* Table highlight */
+.row-danger { background-color: rgba(231, 76, 60, 0.08); }
+.row-warning { background-color: rgba(243, 156, 18, 0.08); }
+
+/* Transition */
+.sidebar-transition { transition: width 0.25s ease; }
+
+/* Card drill-down animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}

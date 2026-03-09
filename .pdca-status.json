@@ -1,0 +1,53 @@
+{
+  "ifems-backend": {
+    "phase": "do",
+    "startedAt": "2026-02-20T02:49:00.000Z",
+    "planPath": "docs/01-plan/features/ifems-backend.plan.md",
+    "doCompletedAt": "2026-02-20T02:53:00.000Z",
+    "matchRate": null,
+    "iterationCount": 0,
+    "lastUpdated": "2026-02-20T02:53:00.000Z",
+    "notes": "Infrastructure complete: Docker+TimescaleDB, 4 tables with Hypertables, NestJS 6 modules, Swagger docs. API running on :4000. Prisma connection issue (workaround applied)."
+  },
+  "tag-management": {
+    "phase": "archived",
+    "startedAt": "2026-02-20T02:56:00.000Z",
+    "completedAt": "2026-02-23T04:57:00.000Z",
+    "archivedAt": "2026-02-23T04:59:00.000Z",
+    "archivedTo": "docs/archive/2026-02/tag-management/",
+    "matchRate": 93,
+    "iterationCount": 1,
+    "lastUpdated": "2026-02-23T04:59:00.000Z",
+    "notes": "Tag Management System complete. 27+ API endpoints, 4 frontend screens, 2,794 tags managed. Match rate improved from 82% to 93%."
+  },
+  "backend-api": {
+    "phase": "archived",
+    "startedAt": "2026-02-19T00:00:00.000Z",
+    "completedAt": "2026-02-28T00:00:00.000Z",
+    "archivedAt": "2026-02-28T02:45:00.000Z",
+    "archivedTo": "docs/archive/2026-02/backend-api/",
+    "matchRate": 91,
+    "iterationCount": 8,
+    "lastUpdated": "2026-02-28T02:45:00.000Z",
+    "notes": "i-FEMS Backend API 전체 구현 (77개 엔드포인트). 8회 PDCA 반복으로 62%→91% 달성. NestJS 11 + Prisma + TimescaleDB."
+  },
+  "tag-classification-redesign": {
+    "phase": "archived",
+    "startedAt": "2026-03-04T00:00:00.000Z",
+    "completedAt": "2026-03-04T23:59:00.000Z",
+    "archivedAt": "2026-03-04T17:00:00.000Z",
+    "archivedTo": "docs/archive/2026-03/tag-classification-redesign/",
+    "matchRate": 93,
+    "iterationCount": 1,
+    "lastUpdated": "2026-03-04T17:00:00.000Z",
+    "notes": "태그 분류 체계 재설계 완료. TagType/DataType → MeasureType/TagCategory 2-Layer. Config+ConfigTag 분리로 복수 태그 매핑 지원. Missing 5건 모두 해결."
+  },
+  "frontend-backend-integration": {
+    "phase": "archived",
+    "matchRate": 98,
+    "iterationCount": 1,
+    "startedAt": "2026-03-04T17:00:00.000Z",
+    "archivedAt": "2026-03-04T19:50:00.000Z",
+    "archivedTo": "docs/archive/2026-03/frontend-backend-integration/"
+  }
+}
