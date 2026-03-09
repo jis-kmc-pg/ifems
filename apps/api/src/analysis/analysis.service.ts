@@ -84,24 +84,38 @@ export class AnalysisService {
       const nextDayUtc = toUtcSql(nextDay);
       const prevDateUtc = toUtcSql(prevDate);
 
-      // 당일 데이터 (FIRST/LAST: 태그별 시간대 적산차 + INTEGRAL_TRAP SUM)
+      // 당일 데이터 — hourly CA 직접 조회 (VIEW 바이패스)
+      const facilityFilter = isCode
+        ? Prisma.sql`f.code = ${facilityId}`
+        : Prisma.sql`f.id = ${facilityId}`;
+
       const currentData = await this.prisma.$queryRaw<any[]>`
         WITH tag_usage AS (
-          SELECT
-            c."tagId",
-            c.calc_method,
-            EXTRACT(HOUR FROM c.bucket + ${KST_OFFSET}) as hour,
-            CASE WHEN c.calc_method = 'DIFF'
-              THEN LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) + SUM(COALESCE(c.reset_correction, 0))
-              ELSE SUM(c.usage_diff)
-            END as usage
-          FROM cagg_usage_combined_1min c
-          JOIN facilities f ON c."facilityId" = f.id
-          WHERE ${isCode ? Prisma.sql`f.code = ${facilityId}` : Prisma.sql`f.id = ${facilityId}`}
-            AND c.bucket >= ${targetDateUtc}
-            AND c.bucket < ${nextDayUtc}
-            AND c.energy_type = ${energyType}
-          GROUP BY c."tagId", c.calc_method, EXTRACT(HOUR FROM c.bucket + ${KST_OFFSET})
+          SELECT u."tagId",
+            EXTRACT(HOUR FROM u.bucket + ${KST_OFFSET}) as hour,
+            LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+          FROM cagg_usage_1h u
+          JOIN facilities f ON u."facilityId" = f.id
+          WHERE ${facilityFilter}
+            AND u.bucket >= ${targetDateUtc} AND u.bucket < ${nextDayUtc}
+            AND u.energy_type::text = ${energyType}
+          GROUP BY u."tagId", EXTRACT(HOUR FROM u.bucket + ${KST_OFFSET})
+          UNION ALL
+          SELECT t."tagId",
+            EXTRACT(HOUR FROM t.bucket + ${KST_OFFSET}) as hour,
+            SUM(CASE WHEN t.energy_type = 'elec'::"EnergyType" THEN t.sum_value / 60.0 ELSE t.sum_value END) as usage
+          FROM cagg_trend_usage_1h t
+          JOIN facilities f ON t."facilityId" = f.id
+          WHERE ${facilityFilter}
+            AND t.bucket >= ${targetDateUtc} AND t.bucket < ${nextDayUtc}
+            AND t.energy_type::text = ${energyType}
+            AND EXISTS (
+              SELECT 1 FROM facility_energy_configs fec
+              WHERE fec."facilityId" = t."facilityId"
+                AND fec."energyType"::text = t.energy_type::text
+                AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
+            )
+          GROUP BY t."tagId", EXTRACT(HOUR FROM t.bucket + ${KST_OFFSET})
         )
         SELECT hour, SUM(usage) as value
         FROM tag_usage
@@ -109,24 +123,34 @@ export class AnalysisService {
         ORDER BY hour
       `;
 
-      // 전일 데이터 (FIRST/LAST)
+      // 전일 데이터 — hourly CA 직접 조회
       const prevData = await this.prisma.$queryRaw<any[]>`
         WITH tag_usage AS (
-          SELECT
-            c."tagId",
-            c.calc_method,
-            EXTRACT(HOUR FROM c.bucket + ${KST_OFFSET}) as hour,
-            CASE WHEN c.calc_method = 'DIFF'
-              THEN LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) + SUM(COALESCE(c.reset_correction, 0))
-              ELSE SUM(c.usage_diff)
-            END as usage
-          FROM cagg_usage_combined_1min c
-          JOIN facilities f ON c."facilityId" = f.id
-          WHERE ${isCode ? Prisma.sql`f.code = ${facilityId}` : Prisma.sql`f.id = ${facilityId}`}
-            AND c.bucket >= ${prevDateUtc}
-            AND c.bucket < ${targetDateUtc}
-            AND c.energy_type = ${energyType}
-          GROUP BY c."tagId", c.calc_method, EXTRACT(HOUR FROM c.bucket + ${KST_OFFSET})
+          SELECT u."tagId",
+            EXTRACT(HOUR FROM u.bucket + ${KST_OFFSET}) as hour,
+            LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+          FROM cagg_usage_1h u
+          JOIN facilities f ON u."facilityId" = f.id
+          WHERE ${facilityFilter}
+            AND u.bucket >= ${prevDateUtc} AND u.bucket < ${targetDateUtc}
+            AND u.energy_type::text = ${energyType}
+          GROUP BY u."tagId", EXTRACT(HOUR FROM u.bucket + ${KST_OFFSET})
+          UNION ALL
+          SELECT t."tagId",
+            EXTRACT(HOUR FROM t.bucket + ${KST_OFFSET}) as hour,
+            SUM(CASE WHEN t.energy_type = 'elec'::"EnergyType" THEN t.sum_value / 60.0 ELSE t.sum_value END) as usage
+          FROM cagg_trend_usage_1h t
+          JOIN facilities f ON t."facilityId" = f.id
+          WHERE ${facilityFilter}
+            AND t.bucket >= ${prevDateUtc} AND t.bucket < ${targetDateUtc}
+            AND t.energy_type::text = ${energyType}
+            AND EXISTS (
+              SELECT 1 FROM facility_energy_configs fec
+              WHERE fec."facilityId" = t."facilityId"
+                AND fec."energyType"::text = t.energy_type::text
+                AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
+            )
+          GROUP BY t."tagId", EXTRACT(HOUR FROM t.bucket + ${KST_OFFSET})
         )
         SELECT hour, SUM(usage) as value
         FROM tag_usage
