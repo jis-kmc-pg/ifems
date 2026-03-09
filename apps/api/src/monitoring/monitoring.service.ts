@@ -200,27 +200,32 @@ export class MonitoringService {
       const todayUtc = toUtcSql(today);
       const nextDayUtc = toUtcSql(tomorrow);
 
-      // 라인별 사용량: FIRST/LAST + INTEGRAL_TRAP 통합 (cagg_usage_combined_1min)
+      // 라인별 사용량 — hourly CA 직접 조회 (VIEW 바이패스)
       const lineData = await this.prisma.$queryRaw<any[]>`
         WITH tag_usage AS (
-          SELECT
-            c."tagId",
-            c."facilityId",
-            c.energy_type,
-            c.calc_method,
-            CASE WHEN c.calc_method = 'DIFF'
-              THEN LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) + SUM(COALESCE(c.reset_correction, 0))
-              ELSE SUM(c.usage_diff)
-            END as usage
-          FROM cagg_usage_combined_1min c
-          WHERE c.bucket >= ${todayUtc} AND c.bucket < ${nextDayUtc}
-          GROUP BY c."tagId", c."facilityId", c.energy_type, c.calc_method
+          SELECT u."facilityId", u.energy_type,
+            LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+          FROM cagg_usage_1h u
+          WHERE u.bucket >= ${todayUtc} AND u.bucket < ${nextDayUtc}
+          GROUP BY u."facilityId", u.energy_type
+          UNION ALL
+          SELECT t."facilityId", t.energy_type,
+            SUM(CASE WHEN t.energy_type = 'elec'::"EnergyType" THEN t.sum_value / 60.0 ELSE t.sum_value END) as usage
+          FROM cagg_trend_usage_1h t
+          WHERE t.bucket >= ${todayUtc} AND t.bucket < ${nextDayUtc}
+            AND EXISTS (
+              SELECT 1 FROM facility_energy_configs fec
+              WHERE fec."facilityId" = t."facilityId"
+                AND fec."energyType"::text = t.energy_type::text
+                AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
+            )
+          GROUP BY t."facilityId", t.energy_type
         )
         SELECT
           l.code as line,
           l.name as "lineName",
-          SUM(CASE WHEN tu.energy_type = 'elec' THEN tu.usage ELSE 0 END) as "totalPower",
-          SUM(CASE WHEN tu.energy_type = 'air' THEN tu.usage ELSE 0 END) as "totalAir"
+          SUM(CASE WHEN tu.energy_type::text = 'elec' THEN tu.usage ELSE 0 END) as "totalPower",
+          SUM(CASE WHEN tu.energy_type::text = 'air' THEN tu.usage ELSE 0 END) as "totalAir"
         FROM facilities f
         INNER JOIN lines l ON f."lineId" = l.id
         LEFT JOIN tag_usage tu ON f.id = tu."facilityId"
