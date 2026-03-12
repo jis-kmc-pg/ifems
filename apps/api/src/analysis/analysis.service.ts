@@ -46,7 +46,7 @@ export class AnalysisService {
 
         lineMap.get(lineId).children.push({
           id: f.code,
-          label: f.code,
+          label: f.name || f.code,
         });
       });
 
@@ -258,6 +258,136 @@ export class AnalysisService {
     }
   }
 
+  // ANL-009/010: 시간범위 내 싸이클 목록 (레거시 CYCLE_STD_MST_MMS 기반)
+  async getCyclesInRange(facilityId: string, start: string, end: string) {
+    this.logger.log(`Fetching cycles in range: ${facilityId} ${start}~${end}`);
+
+    try {
+      // facilityId가 UUID면 facility code로 변환
+      let facilityCode = facilityId;
+      if (!facilityId.startsWith('HNK')) {
+        const fac = await this.prisma.facility.findFirst({
+          where: { id: facilityId },
+          select: { code: true },
+        });
+        if (fac) facilityCode = fac.code;
+      }
+
+      // ISO 타임스탬프 → 로컬 시간 문자열 (CYCLE_STD_MST_MMS의 START_DT는 varchar)
+      const toLocalStr = (iso: string) => {
+        const d = new Date(iso);
+        const y = d.getFullYear();
+        const mo = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mm = String(d.getMinutes()).padStart(2, '0');
+        const ss = String(d.getSeconds()).padStart(2, '0');
+        return `${y}-${mo}-${dd} ${hh}:${mm}:${ss}`;
+      };
+      const startLocal = toLocalStr(start);
+      const endLocal = toLocalStr(end);
+
+      const rows = await this.prisma.$queryRawUnsafe<Array<{
+        id: string;
+        cycle_number: string;
+        start_time: string;
+        end_time: string;
+        duration_ms: string;
+        total_energy: string | null;
+        dtw: string | null;
+        delay_ms: string | null;
+        stand_yn: number;
+      }>>(`
+        SELECT
+          c."MATERIAL_ID" as id,
+          ROW_NUMBER() OVER (ORDER BY MIN(c."START_DT")) as cycle_number,
+          MIN(c."START_DT") as start_time,
+          MAX(c."END_DT") as end_time,
+          AVG(c."DIFF_DESC")::integer as duration_ms,
+          AVG(c."U_ENERGY")::numeric(10,2) as total_energy,
+          AVG(c."DTW")::numeric(10,4) as dtw,
+          AVG(c."CYCLE_DELAY")::integer as delay_ms,
+          MAX(c."STAND_YN") as stand_yn
+        FROM "CYCLE_STD_MST_MMS" c
+        JOIN "CYCLE_MMS_MAPPING" m
+          ON c."MACH_ID" = m."MACH_ID" AND c."TAG_NAME" = m."TAG_NAME"
+        WHERE m."MCN_CD" = $1
+          AND c."END_DT" > $2
+          AND c."START_DT" < $3
+        GROUP BY c."MATERIAL_ID"
+        ORDER BY start_time
+        LIMIT 500
+      `, facilityCode, startLocal, endLocal);
+
+      this.logger.log(`Found ${rows.length} cycles for ${facilityCode}`);
+
+      return rows.map((r) => {
+        const dtwVal = r.dtw ? Number(r.dtw) : null;
+        const similarity = dtwVal != null ? Math.round((1 - dtwVal) * 1000) / 10 : 0;
+        const durationSec = Math.round(Number(r.duration_ms || 0) / 1000);
+        const delaySec = Math.round(Number(r.delay_ms || 0) / 1000);
+        // STAND_YN: 1=기준(normal), 2=정상(normal), 3=이상(anomaly)
+        const status = r.stand_yn <= 2 ? 'normal' : delaySec > 5 ? 'delayed' : 'anomaly';
+
+        return {
+          id: r.id,
+          cycleNumber: Number(r.cycle_number),
+          startTime: new Date(r.start_time).toISOString(),
+          endTime: new Date(r.end_time).toISOString(),
+          duration: durationSec,
+          totalEnergy: Math.round(Number(r.total_energy || 0) * 100) / 100,
+          peakPower: 0,
+          avgPower: 0,
+          similarity,
+          delay: delaySec,
+          status: status as 'normal' | 'delayed' | 'anomaly',
+        };
+      });
+    } catch (error) {
+      this.logger.error('Error fetching cycles in range:', error);
+      return [];
+    }
+  }
+
+  // ANL-011: 싸이클 내 스텝 목록
+  async getCycleSteps(materialId: string) {
+    this.logger.log(`Fetching steps for cycle: ${materialId}`);
+
+    try {
+      const rows = await this.prisma.$queryRawUnsafe<Array<{
+        step_seq: number;
+        start_time: string;
+        end_time: string;
+      }>>(`
+        SELECT
+          s."STEP_SEQ" as step_seq,
+          MIN(s."START_DT") as start_time,
+          MAX(s."END_DT") as end_time
+        FROM "STEP_STD_MST_MMS" s
+        WHERE s."MATERIAL_ID" = $1
+        GROUP BY s."STEP_SEQ"
+        ORDER BY s."STEP_SEQ"
+      `, materialId);
+
+      this.logger.log(`Found ${rows.length} steps for cycle ${materialId}`);
+
+      return rows.map(r => {
+        const startDt = new Date(r.start_time);
+        const endDt = new Date(r.end_time);
+        const durationSec = Math.round((endDt.getTime() - startDt.getTime()) / 1000);
+        return {
+          stepSeq: r.step_seq,
+          startTime: startDt.toISOString(),
+          endTime: endDt.toISOString(),
+          durationSec,
+        };
+      });
+    } catch (error) {
+      this.logger.error('Error fetching cycle steps:', error);
+      return [];
+    }
+  }
+
   // ANL-003: 싸이클 파형 데이터
   // Frontend expects: Array<{ sec: number; value: number }>
   async getCycleWaveform(cycleId: string, isReference = false, interval: '10s' | '1s' = '10s') {
@@ -385,5 +515,172 @@ export class AnalysisService {
     }
 
     return results;
+  }
+
+  // ──────────────────────────────────────────────
+  // 설비별 트렌드 태그 순시값 조회 (ANL-002 상세 비교 분석)
+  // ──────────────────────────────────────────────
+
+  /**
+   * 설비별 트렌드 태그 수 (전체 설비 일괄)
+   */
+  async getFacilityTagCounts(energyType?: string): Promise<Record<string, number>> {
+    const counts = await this.prisma.tag.groupBy({
+      by: ['facilityId'],
+      where: {
+        measureType: 'INSTANTANEOUS',
+        category: 'ENERGY',
+        isActive: true,
+        ...(energyType ? { energyType: energyType as any } : {}),
+      },
+      _count: { _all: true },
+    });
+
+    const facilityIds = counts.map(c => c.facilityId);
+    const facilities = await this.prisma.facility.findMany({
+      where: { id: { in: facilityIds } },
+      select: { id: true, code: true },
+    });
+    const idToCode = new Map(facilities.map(f => [f.id, f.code]));
+
+    const result: Record<string, number> = {};
+    for (const c of counts) {
+      const code = idToCode.get(c.facilityId);
+      if (code) result[code] = c._count._all;
+    }
+    return result;
+  }
+
+  /**
+   * 설비 코드 → UUID 변환 (코드가 전달되면 UUID로 변환, UUID면 그대로)
+   */
+  private async resolveFacilityId(facilityIdOrCode: string): Promise<string> {
+    const isCode = facilityIdOrCode.startsWith('HNK');
+    if (!isCode) return facilityIdOrCode;
+
+    const facility = await this.prisma.facility.findFirst({
+      where: { code: facilityIdOrCode },
+      select: { id: true },
+    });
+    if (!facility) {
+      this.logger.warn(`Facility not found for code: ${facilityIdOrCode}`);
+      return facilityIdOrCode; // fallback
+    }
+    return facility.id;
+  }
+
+  /**
+   * 설비의 트렌드 태그 목록 조회
+   */
+  async getFacilityTrendTags(facilityIdOrCode: string, energyType?: string) {
+    const facilityId = await this.resolveFacilityId(facilityIdOrCode);
+    return this.prisma.tag.findMany({
+      where: {
+        facilityId,
+        measureType: 'INSTANTANEOUS',
+        category: 'ENERGY',
+        isActive: true,
+        ...(energyType ? { energyType: energyType as any } : {}),
+      },
+      select: {
+        id: true,
+        tagName: true,
+        displayName: true,
+        energyType: true,
+        unit: true,
+      },
+      orderBy: { tagName: 'asc' },
+    });
+  }
+
+  /**
+   * 설비의 모든 트렌드 태그 순시값 시계열 조회
+   *
+   * 응답 형태:
+   * {
+   *   tags: [{ tagName, displayName, energyType, unit }],
+   *   data: [{ time, timestamp, [tagName1]: value, [tagName2]: value, ... }]
+   * }
+   */
+  async getFacilityTrendData(
+    facilityIdOrCode: string,
+    startTime: string,
+    endTime: string,
+    interval: '10s' | '1s' = '10s',
+    energyType?: string,
+  ) {
+    this.logger.log(`Fetching trend data: facility=${facilityIdOrCode}, interval=${interval}, energyType=${energyType ?? 'all'}`);
+
+    // 1. 해당 설비의 트렌드 태그 조회 (코드→UUID 변환 포함)
+    const tags = await this.getFacilityTrendTags(facilityIdOrCode, energyType);
+    if (tags.length === 0) {
+      return { tags: [], data: [] };
+    }
+
+    const tagIds = tags.map(t => t.id);
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+
+    // 2. 순시값 조회 (tag_data_raw에서 직접)
+    const bucketInterval = interval === '1s' ? '1 second' : '10 seconds';
+
+    // tagId 목록을 SQL 안전하게 구성 (Prisma findMany 결과 = 안전한 UUID)
+    const tagIdList = tagIds.map(id => `'${id}'`).join(',');
+
+    const rows = await this.prisma.$queryRawUnsafe<
+      Array<{ bucket: Date; tagId: string; avg_value: number }>
+    >(`
+      SELECT
+        time_bucket('${bucketInterval}', t.timestamp) AS bucket,
+        t."tagId",
+        AVG(t.value) as avg_value
+      FROM tag_data_raw t
+      WHERE t."tagId" IN (${tagIdList})
+        AND t.timestamp >= $1::timestamp
+        AND t.timestamp < $2::timestamp
+        AND t.value IS NOT NULL
+      GROUP BY bucket, t."tagId"
+      ORDER BY bucket ASC
+    `, start.toISOString(), end.toISOString());
+
+    // 3. 태그ID → tagName 매핑
+    const tagIdToName = new Map(tags.map(t => [t.id, t.tagName]));
+
+    // 4. 시간별로 그룹핑하여 태그별 값을 하나의 row로 병합
+    const timeMap = new Map<string, Record<string, any>>();
+
+    for (const row of rows) {
+      const ts = new Date(row.bucket);
+      const timeKey = ts.toISOString();
+      const hh = String(ts.getHours()).padStart(2, '0');
+      const mm = String(ts.getMinutes()).padStart(2, '0');
+      const ss = String(ts.getSeconds()).padStart(2, '0');
+
+      if (!timeMap.has(timeKey)) {
+        timeMap.set(timeKey, {
+          time: `${hh}:${mm}:${ss}`,
+          timestamp: timeKey,
+        });
+      }
+
+      const tagName = tagIdToName.get(row.tagId);
+      if (tagName) {
+        timeMap.get(timeKey)![tagName] = Number(row.avg_value);
+      }
+    }
+
+    const data = Array.from(timeMap.values());
+
+    this.logger.log(`Trend data: ${tags.length} tags, ${data.length} points`);
+
+    return {
+      tags: tags.map(t => ({
+        tagName: t.tagName,
+        displayName: t.displayName,
+        energyType: t.energyType,
+        unit: t.unit,
+      })),
+      data,
+    };
   }
 }

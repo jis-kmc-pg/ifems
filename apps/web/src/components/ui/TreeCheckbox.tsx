@@ -14,6 +14,7 @@ interface TreeCheckboxProps {
   onCheckedChange: (checked: Set<string>) => void;
   expanded?: Set<string>;
   onExpandedChange?: (expanded: Set<string>) => void;
+  badgeMap?: Record<string, number | string>;
   className?: string;
 }
 
@@ -22,13 +23,14 @@ function collectAll(nodes: TreeNode[]): string[] {
 }
 
 function NodeItem({
-  node, checked, expanded, onToggle, onExpand,
+  node, checked, expanded, onToggle, onExpand, badgeMap,
 }: {
   node: TreeNode;
   checked: Set<string>;
   expanded: Set<string>;
   onToggle: (id: string, checked: Set<string>) => void;
   onExpand: (id: string) => void;
+  badgeMap?: Record<string, number | string>;
 }) {
   const checkboxRef = useRef<HTMLInputElement>(null);
   const hasChildren = (node.children ?? []).length > 0;
@@ -47,15 +49,23 @@ function NodeItem({
   }, [indeterminate]);
 
   const handleCheck = () => {
-    const next = new Set(checked);
-    if (isChecked || allChecked) {
+    if (hasChildren) {
+      // 그룹 노드: 빈 상태 → 펼치기만, 인더터미네이트/전체선택 → 하위 해제
+      if (!someChecked && !allChecked) {
+        onExpand(node.id);
+        return;
+      }
+      const next = new Set(checked);
       next.delete(node.id);
       allChildIds.forEach((id) => next.delete(id));
+      onToggle(node.id, next);
     } else {
-      next.add(node.id);
-      allChildIds.forEach((id) => next.add(id));
+      // 리프 노드: 토글
+      const next = new Set(checked);
+      if (isChecked) next.delete(node.id);
+      else next.add(node.id);
+      onToggle(node.id, next);
     }
-    onToggle(node.id, next);
   };
 
   return (
@@ -87,12 +97,15 @@ function NodeItem({
           >
             {node.label}
           </span>
+          {badgeMap && badgeMap[node.id] !== undefined && (
+            <span className="text-[10px] text-gray-400 ml-0.5">({badgeMap[node.id]})</span>
+          )}
         </label>
       </div>
       {hasChildren && isExpanded && (
         <div className="pl-5">
           {node.children!.map((child) => (
-            <NodeItem key={child.id} node={child} checked={checked} expanded={expanded} onToggle={onToggle} onExpand={onExpand} />
+            <NodeItem key={child.id} node={child} checked={checked} expanded={expanded} onToggle={onToggle} onExpand={onExpand} badgeMap={badgeMap} />
           ))}
         </div>
       )}
@@ -100,7 +113,7 @@ function NodeItem({
   );
 }
 
-export default function TreeCheckbox({ nodes, checked, onCheckedChange, expanded: controlledExpanded, onExpandedChange, className }: TreeCheckboxProps) {
+export default function TreeCheckbox({ nodes, checked, onCheckedChange, expanded: controlledExpanded, onExpandedChange, badgeMap, className }: TreeCheckboxProps) {
   const [internalExpanded, setInternalExpanded] = useState<Set<string>>(new Set(nodes.map((n) => n.id)));
 
   // Use controlled expanded if provided, otherwise use internal state
@@ -128,6 +141,7 @@ export default function TreeCheckbox({ nodes, checked, onCheckedChange, expanded
           expanded={expanded}
           onToggle={(_, newChecked) => onCheckedChange(newChecked)}
           onExpand={handleExpand}
+          badgeMap={badgeMap}
         />
       ))}
     </div>

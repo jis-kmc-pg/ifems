@@ -1,11 +1,43 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { SIDEBAR_MENUS, type GnbMenuId } from '../../lib/constants';
+import { SIDEBAR_MENUS, type GnbMenuId, type SidebarEntry } from '../../lib/constants';
 import { useUiStore } from '../../stores/uiStore';
 import { cn } from '../../lib/utils';
 
 function getActiveGnbMenu(pathname: string): GnbMenuId {
   const segment = pathname.split('/')[1] as GnbMenuId;
   return (segment in SIDEBAR_MENUS ? segment : 'monitoring') as GnbMenuId;
+}
+
+function renderEntry(entry: SidebarEntry, i: number) {
+  if ('group' in entry) {
+    return (
+      <div
+        key={`g-${entry.group}`}
+        className={cn(
+          'px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500',
+          i > 0 && 'mt-2 border-t border-gray-100 dark:border-gray-700 pt-2',
+        )}
+      >
+        {entry.group}
+      </div>
+    );
+  }
+  return (
+    <NavLink
+      key={entry.id}
+      to={entry.path}
+      className={({ isActive }) =>
+        cn(
+          'flex items-center px-4 py-2.5 text-sm whitespace-nowrap transition-colors',
+          isActive
+            ? 'bg-[#E94560] dark:bg-[#E94560] text-white font-medium'
+            : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white'
+        )
+      }
+    >
+      {entry.label}
+    </NavLink>
+  );
 }
 
 export default function Sidebar() {
@@ -22,22 +54,7 @@ export default function Sidebar() {
       )}
     >
       <nav className="flex-1 overflow-y-auto py-3">
-        {menus.map((menu) => (
-          <NavLink
-            key={menu.id}
-            to={menu.path}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center px-4 py-2.5 text-sm whitespace-nowrap transition-colors',
-                isActive
-                  ? 'bg-[#E94560] dark:bg-[#E94560] text-white font-medium'
-                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10 hover:text-gray-900 dark:hover:text-white'
-              )
-            }
-          >
-            {menu.label}
-          </NavLink>
-        ))}
+        {menus.map((entry, i) => renderEntry(entry, i))}
       </nav>
 
       {/* 버전 정보 */}

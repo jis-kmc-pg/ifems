@@ -1,0 +1,355 @@
+import { useState, useMemo, useRef, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { debounce } from 'lodash-es';
+import PageHeader from '../../components/layout/PageHeader';
+import ChartCard from '../../components/ui/ChartCard';
+import DynamicZoomBar from '../../components/ui/DynamicZoomBar';
+import CollapsibleTreePanel from '../../components/ui/CollapsibleTreePanel';
+import TrendChart from '../../components/charts/TrendChart';
+import type { TrendSeries } from '../../components/charts/TrendChart';
+import { FACILITY_COLORS } from '../../lib/chart-series';
+import { getIntervalForZoomRatio, formatInterval } from '../../lib/chart-utils';
+
+import { getFacilityTree, getFacilityTrendData, getFacilityTagCounts } from '../../services/analysis';
+import type { Interval } from '../../types/chart';
+
+const TODAY = new Date().toISOString().slice(0, 10);
+const MAX_DATES = 6;
+const GROUP_IDS = ['plant', 'block', 'head', 'crank', 'assembly'];
+
+type TagInfo = { tagName: string; displayName: string; energyType: string; unit: string };
+type TrendResult = { tags: TagInfo[]; data: Record<string, any>[] };
+
+/** HH:mm:ss 줌 범위를 특정 날짜의 ISO로 변환 (쿼리용) */
+function timeRangeToIso(range: { start: string; end: string } | null, date: string) {
+  if (!range) return { start: `${date}T00:00:00+09:00`, end: `${date}T23:59:59+09:00` };
+  return { start: `${date}T${range.start}+09:00`, end: `${date}T${range.end}+09:00` };
+}
+
+export default function ANL008PeriodAirComparison() {
+  // ── 트리 상태 (단일 선택) ──
+  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set(['plant', 'block']));
+  const { data: tree } = useQuery({ queryKey: ['anl-tree'], queryFn: getFacilityTree });
+  const { data: tagCountMap } = useQuery({
+    queryKey: ['anl008-tag-counts'],
+    queryFn: () => getFacilityTagCounts('air'),
+  });
+  const facilityIds = Array.from(checked).filter(id => !GROUP_IDS.includes(id));
+  const facilityId = facilityIds[0] ?? null;
+
+  // ── 비교 날짜 목록 (최대 6개) ──
+  const [dates, setDates] = useState<string[]>([TODAY]);
+  const addDate = () => {
+    if (dates.length >= MAX_DATES) return;
+    const last = dates[dates.length - 1] ?? TODAY;
+    const prev = new Date(last);
+    prev.setDate(prev.getDate() - 1);
+    setDates(d => [...d, prev.toISOString().slice(0, 10)]);
+  };
+  const removeDate = (idx: number) => setDates(d => d.filter((_, i) => i !== idx));
+  const updateDate = (idx: number, val: string) => setDates(d => d.map((v, i) => i === idx ? val : v));
+
+  // ── 줌 상태 ──
+  const initialInterval: Interval = '10s';
+  const zoomLevels: Interval[] = ['10s', '1s'];
+  const [currentInterval, setCurrentInterval] = useState<Interval>(initialInterval);
+  const [zoomedTimeRange, setZoomedTimeRange] = useState<{ start: string; end: string } | null>(null);
+
+  // ── 6개 고정 쿼리: 같은 설비, 다른 날짜 (Rules of Hooks 준수) ──
+  const r0 = timeRangeToIso(zoomedTimeRange, dates[0] ?? TODAY);
+  const r1 = timeRangeToIso(zoomedTimeRange, dates[1] ?? TODAY);
+  const r2 = timeRangeToIso(zoomedTimeRange, dates[2] ?? TODAY);
+  const r3 = timeRangeToIso(zoomedTimeRange, dates[3] ?? TODAY);
+  const r4 = timeRangeToIso(zoomedTimeRange, dates[4] ?? TODAY);
+  const r5 = timeRangeToIso(zoomedTimeRange, dates[5] ?? TODAY);
+
+  const q0 = useQuery<TrendResult>({
+    queryKey: ['anl008', facilityId, r0.start, r0.end, currentInterval],
+    queryFn: () => getFacilityTrendData(facilityId!, r0.start, r0.end, currentInterval as '10s' | '1s', 'air') as Promise<TrendResult>,
+    enabled: !!facilityId && dates.length > 0,
+  });
+  const q1 = useQuery<TrendResult>({
+    queryKey: ['anl008', facilityId, r1.start, r1.end, currentInterval],
+    queryFn: () => getFacilityTrendData(facilityId!, r1.start, r1.end, currentInterval as '10s' | '1s', 'air') as Promise<TrendResult>,
+    enabled: !!facilityId && dates.length > 1,
+  });
+  const q2 = useQuery<TrendResult>({
+    queryKey: ['anl008', facilityId, r2.start, r2.end, currentInterval],
+    queryFn: () => getFacilityTrendData(facilityId!, r2.start, r2.end, currentInterval as '10s' | '1s', 'air') as Promise<TrendResult>,
+    enabled: !!facilityId && dates.length > 2,
+  });
+  const q3 = useQuery<TrendResult>({
+    queryKey: ['anl008', facilityId, r3.start, r3.end, currentInterval],
+    queryFn: () => getFacilityTrendData(facilityId!, r3.start, r3.end, currentInterval as '10s' | '1s', 'air') as Promise<TrendResult>,
+    enabled: !!facilityId && dates.length > 3,
+  });
+  const q4 = useQuery<TrendResult>({
+    queryKey: ['anl008', facilityId, r4.start, r4.end, currentInterval],
+    queryFn: () => getFacilityTrendData(facilityId!, r4.start, r4.end, currentInterval as '10s' | '1s', 'air') as Promise<TrendResult>,
+    enabled: !!facilityId && dates.length > 4,
+  });
+  const q5 = useQuery<TrendResult>({
+    queryKey: ['anl008', facilityId, r5.start, r5.end, currentInterval],
+    queryFn: () => getFacilityTrendData(facilityId!, r5.start, r5.end, currentInterval as '10s' | '1s', 'air') as Promise<TrendResult>,
+    enabled: !!facilityId && dates.length > 5,
+  });
+
+  const queries = [q0, q1, q2, q3, q4, q5];
+  const anyLoading = queries.some((q, i) => i < dates.length && (q.isLoading || q.isFetching));
+
+  // ── 줌/팬 기준 날짜 ──
+  const baseDate = dates[0] ?? TODAY;
+
+  // ── 데이터 병합 + 시리즈 생성 (날짜별) ──
+  const { chartData, chartSeries, tagInfos } = useMemo(() => {
+    const timeMap = new Map<string, Record<string, any>>();
+    const allSeries: TrendSeries[] = [];
+    let latestTags: TagInfo[] = [];
+
+    dates.forEach((date, qIdx) => {
+      const result = queries[qIdx]?.data;
+      if (!result) return;
+
+      const tags: TagInfo[] = result.tags ?? [];
+      if (tags.length > 0) latestTags = tags;
+
+      const dateColor = FACILITY_COLORS[qIdx % FACILITY_COLORS.length];
+
+      tags.forEach(tag => {
+        allSeries.push({
+          key: `d${qIdx}_${tag.tagName}`,
+          label: `${date} - ${tag.displayName} (${tag.unit})`,
+          color: dateColor,
+          type: 'line' as const,
+          width: 2,
+        });
+      });
+
+      const data: Record<string, any>[] = result.data ?? [];
+      data.forEach((pt: any) => {
+        // 날짜 부분 제거 → 시간만 사용하여 같은 시각끼리 병합
+        // API는 "HH:mm:ss" 반환, 혹시 ISO면 시간 부분만 추출
+        const timeKey = pt.time.includes('T') ? pt.time.slice(11, 19) : pt.time;
+        if (!timeMap.has(timeKey)) {
+          timeMap.set(timeKey, { time: timeKey });
+        }
+        const row = timeMap.get(timeKey)!;
+        tags.forEach(tag => {
+          if (pt[tag.tagName] !== undefined) {
+            row[`d${qIdx}_${tag.tagName}`] = pt[tag.tagName];
+          }
+        });
+      });
+    });
+
+    const sorted = Array.from(timeMap.values()).sort((a, b) => a.time.localeCompare(b.time));
+    return { chartData: sorted, chartSeries: allSeries, tagInfos: latestTags };
+  }, [queries.map(q => q.data), dates]);
+
+  // ── 줌/팬 ──
+  const isZoomingRef = useRef(false);
+  const intervalChangedRef = useRef(false);
+
+  // zoomedTimeRange는 "HH:mm:ss" 형식으로 저장 (xLabels와 동일)
+  const handleZoomRaw = useCallback((zoomRatio: number, timeRange?: { start: string; end: string }) => {
+    if (isZoomingRef.current) return;
+    if (intervalChangedRef.current && zoomRatio >= 0.95) {
+      intervalChangedRef.current = false;
+      return;
+    }
+    isZoomingRef.current = true;
+    try {
+      if (timeRange) {
+        const toHms = (s: string) => s.includes('T') ? s.slice(11, 19) : s;
+        const start = toHms(timeRange.start);
+        const end = toHms(timeRange.end);
+        if (start < end) setZoomedTimeRange({ start, end });
+      }
+      const newInterval = getIntervalForZoomRatio(zoomRatio, currentInterval, initialInterval, 2, zoomLevels);
+      if (newInterval !== currentInterval) {
+        setCurrentInterval(newInterval);
+        intervalChangedRef.current = true;
+      }
+    } finally {
+      isZoomingRef.current = false;
+    }
+  }, [currentInterval]);
+
+  const handleZoom = useMemo(() => debounce(handleZoomRaw, 500), [handleZoomRaw]);
+
+  // 팬: "HH:mm:ss" 기반 초 단위 연산
+  const handlePan = useCallback((direction: 'left' | 'right') => {
+    if (!zoomedTimeRange) return;
+    const toSec = (hms: string) => {
+      const [h, m, s] = hms.split(':').map(Number);
+      return h * 3600 + m * 60 + s;
+    };
+    const toHms = (sec: number) => {
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = sec % 60;
+      return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    };
+    const startSec = toSec(zoomedTimeRange.start);
+    const endSec = toSec(zoomedTimeRange.end);
+    const span = endSec - startSec;
+
+    if (span <= 0) return; // 역전된 범위 방지
+    let ns: number, ne: number;
+    if (direction === 'left') { ns = Math.max(0, startSec - span); ne = ns + span; }
+    else { ne = Math.min(86399, endSec + span); ns = Math.max(0, ne - span); }
+
+    if (ns < ne) setZoomedTimeRange({ start: toHms(ns), end: toHms(ne) });
+  }, [zoomedTimeRange]);
+
+  const panState = useMemo(() => {
+    if (!zoomedTimeRange) return { canLeft: false, canRight: false };
+    const toSec = (hms: string) => {
+      const [h, m, s] = hms.split(':').map(Number);
+      return h * 3600 + m * 60 + s;
+    };
+    return { canLeft: toSec(zoomedTimeRange.start) > 0, canRight: toSec(zoomedTimeRange.end) < 86399 };
+  }, [zoomedTimeRange]);
+
+  const isZoomed = currentInterval !== initialInterval || zoomedTimeRange !== null;
+  const reset = useCallback(() => { setCurrentInterval(initialInterval); setZoomedTimeRange(null); }, []);
+
+  return (
+    <div className="flex flex-col gap-4 h-full">
+      <PageHeader
+        title="기간별 에어 상세 비교"
+        description={`동일 설비의 날짜별 에어 순시값 비교 | 해상도: ${formatInterval(currentInterval)}`}
+      />
+
+      <div className="flex gap-3 flex-1 min-h-0">
+        {/* ── 설비 트리 (좌, 단일 선택) ── */}
+        <CollapsibleTreePanel
+          nodes={tree ?? []}
+          checked={checked}
+          onCheckedChange={(next) => {
+            const leafIds = Array.from(next).filter(id => !GROUP_IDS.includes(id));
+            if (leafIds.length === 0) { setChecked(new Set()); return; }
+            const currentLeafs = Array.from(checked).filter(id => !GROUP_IDS.includes(id));
+            const newLeaf = leafIds.find(id => !currentLeafs.includes(id));
+            setChecked(newLeaf ? new Set([newLeaf]) : new Set());
+          }}
+          expanded={expanded}
+          onExpandedChange={setExpanded}
+          badgeMap={(tagCountMap ?? {}) as Record<string, number>}
+          facilityCount={facilityIds.length}
+          maxFacilities={1}
+        />
+
+        {/* ── 메인 콘텐츠 (우) ── */}
+        <div className="flex-1 flex flex-col gap-3 min-h-0">
+          {/* 설비 카드 + 날짜 목록 */}
+          {!facilityId ? (
+            <div className="flex-shrink-0 border-2 border-dashed border-gray-200 dark:border-gray-600 rounded-lg px-6 py-4 flex items-center justify-center">
+              <span className="text-sm text-gray-400 dark:text-gray-500">좌측 트리에서 설비를 선택해주세요</span>
+            </div>
+          ) : (
+            <div className="flex-shrink-0 bg-white dark:bg-[#16213E] rounded-lg border border-gray-100 dark:border-gray-700 px-3 py-2 shadow-sm">
+              {/* 설비 헤더 */}
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-xs font-bold text-gray-800 dark:text-white flex-1">{facilityId}</span>
+                <button
+                  onClick={() => setChecked(new Set())}
+                  className="w-4 h-4 flex items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                  title="설비 해제"
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><line x1="2" y1="2" x2="8" y2="8"/><line x1="8" y1="2" x2="2" y2="8"/></svg>
+                </button>
+              </div>
+              {/* 태그 배지 */}
+              {tagInfos.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {tagInfos.map(tag => (
+                    <span key={tag.tagName} className="inline-flex items-center text-[10px] px-1.5 py-0.5 rounded bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                      {tag.displayName}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {/* 날짜 목록 */}
+              <div className="flex flex-wrap gap-1.5 items-center">
+                {dates.map((date, i) => (
+                  <div key={i} className="flex items-center gap-1">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: FACILITY_COLORS[i % FACILITY_COLORS.length] }} />
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={(e) => updateDate(i, e.target.value)}
+                      className="text-xs bg-gray-50 dark:bg-[#0F3460] border border-gray-200 dark:border-gray-600 rounded px-2 py-1 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-[#E94560]"
+                    />
+                    {dates.length > 1 && (
+                      <button
+                        onClick={() => removeDate(i)}
+                        className="w-5 h-5 flex items-center justify-center rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-400 hover:text-red-500 transition-colors text-xs font-bold"
+                        title="날짜 제거"
+                      >
+                        &minus;
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {dates.length < MAX_DATES && (
+                  <button
+                    onClick={addDate}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 text-gray-400 hover:border-[#E94560] hover:text-[#E94560] transition-colors text-sm font-bold"
+                    title="날짜 추가"
+                  >
+                    +
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 차트 */}
+          <ChartCard
+            title={!facilityId ? '에어 순시값 트렌드' : `${facilityId} 기간별 비교 (${dates.length}개 날짜)`}
+            subtitle={`해상도: ${formatInterval(currentInterval)}`}
+            className="flex-1 min-h-0"
+            chartId="anl008-chart"
+            exportData={chartData}
+            exportFilename="기간별에어상세비교"
+            minHeight={0}
+            actions={
+              <DynamicZoomBar
+                isZoomed={isZoomed}
+                currentInterval={currentInterval}
+                zoomedTimeRange={zoomedTimeRange}
+                panState={panState}
+                onPan={handlePan}
+                onReset={reset}
+              />
+            }
+          >
+            {!facilityId ? (
+              <div className="h-full flex items-center justify-center text-sm text-gray-400">
+                좌측 트리에서 설비를 선택하세요
+              </div>
+            ) : chartData.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-sm text-gray-400">
+                {anyLoading ? '데이터 로딩 중...' : '데이터가 없습니다'}
+              </div>
+            ) : (
+              <TrendChart
+                data={chartData}
+                series={chartSeries}
+                xKey="time"
+                yLabel="순시값(m³/min)"
+                syncKey="anl008"
+                showLegend={true}
+                onZoomChange={handleZoom}
+                isLoading={anyLoading}
+                loadingMessage={`${formatInterval(currentInterval)} 데이터 로딩 중...`}
+              />
+            )}
+          </ChartCard>
+        </div>
+      </div>
+    </div>
+  );
+}

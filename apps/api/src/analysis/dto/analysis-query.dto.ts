@@ -38,6 +38,20 @@ export class CycleListQueryDto {
   facilityId?: string;
 }
 
+export class CycleRangeQueryDto {
+  @IsNotEmpty()
+  @IsString()
+  facilityId: string; // facility code (e.g. HNK10_010)
+
+  @IsNotEmpty()
+  @IsString()
+  start: string; // ISO 8601
+
+  @IsNotEmpty()
+  @IsString()
+  end: string; // ISO 8601
+}
+
 export class CycleWaveformQueryDto {
   @IsNotEmpty()
   @IsString()
@@ -52,6 +66,12 @@ export class CycleWaveformQueryDto {
   @IsString()
   @IsIn(['10s', '1s'])
   interval?: string; // Data interval (default: 10s)
+}
+
+export class CycleStepsQueryDto {
+  @IsNotEmpty()
+  @IsString()
+  materialId: string; // CYCLE_STD_MST_MMS.MATERIAL_ID (= CycleRangeItem.id)
 }
 
 export class PowerQualityAnalysisDto {

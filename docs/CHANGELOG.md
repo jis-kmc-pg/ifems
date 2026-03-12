@@ -4,6 +4,81 @@ All notable changes to the i-FEMS project are documented in this file.
 
 ---
 
+## [2026-03-11] - ANL007/008 기간별 비교 & TrendChart 줌 안정화 & 시간 표시 개선
+
+### Added
+- **ANL007 기간별 전력 상세 비교** (`ANL007PeriodPowerComparison.tsx`)
+  - 단일 설비 + 다중 날짜 비교 (최대 4일, 색상 자동 할당)
+  - `useSearchFilter` 훅 + `useDynamicResolution` 통합
+  - 날짜 컬러칩 + X 제거 + 점선 안내 박스
+
+- **ANL008 기간별 에어 상세 비교** (`ANL008PeriodAirComparison.tsx`)
+  - ANL007 클론 (에어용, energyType='air', yLabel='순시값(m³/min)')
+
+### Changed
+- **TrendChart spanGaps 적용** (`TrendChart.tsx`)
+  - `spanGaps: !isBar` — line/area 시리즈에서 null 갭 건너뛰고 선 연결
+  - 비교 차트(ANL002/006/007/008)에서 날짜간 시간 불일치로 인한 파란선 미표시 해결
+  - Bar 시리즈는 제외 (개별 막대는 갭 연결 불필요)
+
+- **시간 표시 HH:mm → HH:mm:ss** (10초/1초 해상도 대응)
+  - TrendChart x축 라벨: `slice(tIdx+1, tIdx+6)` → `slice(tIdx+1, tIdx+9)`
+  - DynamicZoomBar: `slice(0,5)` → `slice(0,8)`
+
+### Fixed
+- **줌 범위 역전 방지** (ANL002/006/007/008 공통)
+  - handleZoomRaw: `if (start < end)` 검증 후에만 zoomedTimeRange 설정
+  - handlePan: `if (span <= 0) return` + 경계 클램핑 + `if (ns < ne)` 최종 검증
+  - 증상: DynamicZoomBar "1초 (08:30 – 06:43)" → 시작>종료 → 빈 데이터
+
+---
+
+## [2026-03-11] - ANL006 에어 상세 비교 & TrendChart 툴팁/범례 토글 & DB 성능 최적화
+
+### Added
+- **ANL006 에어 상세 비교 화면** (`ANL006AirDetailedComparison.tsx`)
+  - ANL002(전력 상세 비교)와 동일 구조, energyType='air'
+  - yLabel: `순시값(m³/min)`, 라우트: `/analysis/air-detailed-comparison`
+  - 메뉴 constants.ts에 "에어 상세 비교" 항목 추가
+
+- **TrendChart 플로팅 툴팁**
+  - 마우스 hover 시 커서 따라다니는 팝업 (시간 + 태그명 + 값)
+  - `cursorPos` state: setCursor 훅에서 u.cursor.left/top 추적
+  - `pointer-events-none`, 숨긴 시리즈 자동 제외
+
+- **TrendChart 범례 클릭 토글**
+  - `hiddenSeries` Set<string> state로 시리즈 표시/숨기기
+  - uPlot series `show: !hiddenSeries.has(key)` 연동
+  - 숨김 표시: 투명도 35% + 취소선
+  - 기존 범례의 hover 값 표시 제거 (툴팁으로 대체)
+
+- **tag_data_raw 인덱스 추가**
+  - `CREATE INDEX idx_tag_data_raw_tagid_ts ON tag_data_raw ("tagId", "timestamp")`
+  - 140M+ rows, 7 chunks, 생성 622.7초
+  - 줌 쿼리 25x 개선 (10s 1hr: 2.5s→0.098s)
+
+### Changed
+- **ANL002/ANL006 UX 개선**
+  - 디폴트 상태: 자동 2개 선택 → 빈 상태 (점선 안내 박스)
+  - 설비 카드에 X 버튼 추가 (TreeCheckbox 연동 체크 해제)
+  - DynamicZoomBar: 별도 줄 → ChartCard 헤더 우측 (actions prop)
+
+- **TreeCheckbox 그룹 노드 동작 변경**
+  - 빈 체크박스 클릭 → 전체 선택 안 하고 펼치기만
+  - 인더터미네이트(-) 클릭 → 하위 아이템 전체 해제
+
+- **에어 INSTANTANEOUS 태그 단위**: `m³` → `m³/min` (DB 657개 태그 UPDATE)
+
+### Fixed
+- **analysis.service.ts 타임스탬프 캐스트 버그**
+  - `::timestamptz` → `::timestamp` (tag_data_raw.timestamp = `timestamp without time zone`)
+  - PostgreSQL session timezone=Asia/Seoul → 9시간 오프셋으로 좁은 시간범위 빈 데이터 반환
+- **이중 수집기 데이터 충돌**
+  - 내장(10s) + 독립(1s) 동시 실행 → 적산차 음수값 발생
+  - `.env`에 `DISABLE_COLLECTOR=true` 추가하여 내장 수집기 비활성화
+
+---
+
 ## [2026-03-06] - TrendChart 높이 측정 버그 수정 & Backend NULL 처리 & KPI 적산차 방식 전환
 
 ### Changed
@@ -673,6 +748,6 @@ Versions follow [Semantic Versioning](https://semver.org):
 
 ---
 
-**Last Updated**: 2026-03-05
+**Last Updated**: 2026-03-11
 **Project**: i-FEMS (Intelligence Facility & Energy Management System)
 **Repository**: d:\AI_PJ\IFEMS\

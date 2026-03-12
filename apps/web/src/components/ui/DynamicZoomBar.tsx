@@ -45,7 +45,7 @@ export default function DynamicZoomBar({
         {formatInterval(currentInterval)}
         {zoomedTimeRange && (
           <span className="text-gray-400 ml-1">
-            ({zoomedTimeRange.start.slice(11, 16)} ~ {zoomedTimeRange.end.slice(11, 16)})
+            ({zoomedTimeRange.start.slice(0, 8)} ~ {zoomedTimeRange.end.slice(0, 8)})
           </span>
         )}
       </span>

@@ -16,6 +16,10 @@ export class TagDataCollectorService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {
+    if (process.env.DISABLE_COLLECTOR === 'true') {
+      this.logger.log('⏸️ 데이터 수집 비활성화 (DISABLE_COLLECTOR=true, 독립 수집기 사용)');
+      return;
+    }
     if (process.env.NODE_ENV !== 'production') {
       await this.loadCumulativeValues();
       this.logger.log('🚀 Mock 데이터 수집 시작 (10초 주기)');
@@ -29,11 +33,11 @@ export class TagDataCollectorService implements OnModuleInit {
       const lastValues = await this.prisma.$queryRawUnsafe<
         Array<{ tagId: string; lastValue: number }>
       >(`
-        SELECT DISTINCT ON (t."tagId") t."tagId" as "tagId", t."numericValue" as "lastValue"
+        SELECT DISTINCT ON (t."tagId") t."tagId" as "tagId", t.value as "lastValue"
         FROM tag_data_raw t
         JOIN tags tag ON t."tagId" = tag.id
         WHERE tag."measureType" = 'CUMULATIVE'
-          AND t."numericValue" IS NOT NULL
+          AND t.value IS NOT NULL
         ORDER BY t."tagId", t."timestamp" DESC
       `);
 
@@ -98,9 +102,8 @@ export class TagDataCollectorService implements OnModuleInit {
       const tagDataBatch = tags.map((tag) => ({
         timestamp,
         tagId: tag.id,
-        numericValue: this.generateMockValue(tag),
+        value: this.generateMockValue(tag),
         quality: 'GOOD' as const,
-        collectorId: 'MOCK_COLLECTOR',
       }));
 
       await this.prisma.tagDataRaw.createMany({
@@ -117,6 +120,31 @@ export class TagDataCollectorService implements OnModuleInit {
     } catch (error) {
       this.logger.error('데이터 수집 에러', error);
     }
+  }
+
+  /**
+   * 비근무시간 여부 판단 (KST 기준)
+   * 평일 08:00~18:00 외 시간 또는 주말
+   */
+  private isNonWorkHours(): boolean {
+    const now = new Date();
+    const kstHour = (now.getUTCHours() + 9) % 24;
+    const kstDate = new Date(now.getTime() + 9 * 3600000);
+    const kstDay = kstDate.getDay(); // 0=일, 6=토
+    return kstHour < 8 || kstHour >= 18 || kstDay === 0 || kstDay === 6;
+  }
+
+  /**
+   * 에어 급증 대상 태그 결정 (태그 ID 해시 + 날짜 기반)
+   * 날짜별로 다른 ~20% 태그가 급증하여 자연스러운 패턴 생성
+   */
+  private shouldAirSurge(tagId: string): boolean {
+    const dayOfMonth = new Date().getDate();
+    let hash = 0;
+    for (let i = 0; i < tagId.length; i++) {
+      hash = ((hash << 5) - hash + tagId.charCodeAt(i)) | 0;
+    }
+    return ((Math.abs(hash) + dayOfMonth) % 5) === 0;
   }
 
   /**
@@ -140,7 +168,13 @@ export class TagDataCollectorService implements OnModuleInit {
         ? 0.01 + Math.random() * 0.04  // 0.01~0.05 kWh/초
         : 0.1 + Math.random() * 0.4;   // 0.1~0.5 m³/초
 
-      const increment = baseIncrement * timeMultiplier;
+      let increment = baseIncrement * timeMultiplier;
+
+      // 🔥 비근무시간 에어 급증 시뮬레이션: 일부 설비에서 에어 사용량 3배 급증
+      if (energyType === 'air' && this.isNonWorkHours() && this.shouldAirSurge(id)) {
+        increment = baseIncrement * 3.0;
+      }
+
       const newValue = currentValue + increment;
       this.cumulativeValues.set(id, newValue);
 
@@ -201,7 +235,6 @@ export class TagDataCollectorService implements OnModuleInit {
   getStatus() {
     return {
       isCollecting: this.isCollecting,
-      collectorId: 'MOCK_COLLECTOR',
       interval: '10 seconds',
     };
   }

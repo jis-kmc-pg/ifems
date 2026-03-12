@@ -134,17 +134,17 @@ export class EnergyAggregatorService {
         timestamp: { gte: startTime, lt: endTime },
         quality: 'GOOD',
       },
-      _sum: { numericValue: true },
-      _avg: { numericValue: true },
-      _min: { numericValue: true },
-      _max: { numericValue: true },
+      _sum: { value: true },
+      _avg: { value: true },
+      _min: { value: true },
+      _max: { value: true },
     });
 
     return {
-      sum: result._sum.numericValue || 0,
-      avg: result._avg.numericValue || 0,
-      min: result._min.numericValue || 0,
-      max: result._max.numericValue || 0,
+      sum: result._sum.value || 0,
+      avg: result._avg.value || 0,
+      min: result._min.value || 0,
+      max: result._max.value || 0,
     };
   }
 
@@ -166,10 +166,10 @@ export class EnergyAggregatorService {
           timestamp: { gte: startTime, lt: endTime },
           quality: 'GOOD',
         },
-        _avg: { numericValue: true },
+        _avg: { value: true },
       });
 
-      return result._avg.numericValue;
+      return result._avg.value;
     };
 
     return {
@@ -261,10 +261,10 @@ export class EnergyAggregatorService {
           tagId,
           timestamp: { gte: startTime, lt: endTime },
           quality: 'GOOD',
-          numericValue: { not: null },
+          value: { not: null },
         },
         orderBy: { timestamp: 'asc' },
-        select: { timestamp: true, numericValue: true },
+        select: { timestamp: true, value: true },
       });
 
       if (dataPoints.length < 2) continue;
@@ -272,7 +272,7 @@ export class EnergyAggregatorService {
       for (let i = 0; i < dataPoints.length - 1; i++) {
         const curr = dataPoints[i];
         const next = dataPoints[i + 1];
-        const avgPower = ((curr.numericValue ?? 0) + (next.numericValue ?? 0)) / 2;
+        const avgPower = ((curr.value ?? 0) + (next.value ?? 0)) / 2;
         const durationHours = (next.timestamp.getTime() - curr.timestamp.getTime()) / (1000 * 3600);
         totalEnergy += avgPower * durationHours;
       }
@@ -308,10 +308,10 @@ export class EnergyAggregatorService {
         timestamp: { gte: startTime, lt: endTime },
         quality: 'GOOD',
       },
-      _max: { numericValue: true },
+      _max: { value: true },
     });
 
-    return result._max.numericValue;
+    return result._max.value;
   }
 
   /**
@@ -334,8 +334,8 @@ export class EnergyAggregatorService {
         orderBy: { timestamp: 'desc' },
       });
 
-      if (data?.numericValue !== null && data?.numericValue !== undefined) {
-        values.set(tagId, data.numericValue);
+      if (data?.value !== null && data?.value !== undefined) {
+        values.set(tagId, data.value);
       }
     }
 
@@ -361,11 +361,11 @@ export class EnergyAggregatorService {
         timestamp: { gte: startTime, lt: endTime },
         quality: 'GOOD',
       },
-      _sum: { numericValue: true },
+      _sum: { value: true },
       _count: true,
     });
 
-    const operatingSeconds = result._sum.numericValue || 0;
+    const operatingSeconds = result._sum.value || 0;
     const totalDataPoints = result._count;
 
     // 데이터가 없으면 null
@@ -390,10 +390,10 @@ export class EnergyAggregatorService {
         timestamp: { gte: startTime, lt: endTime },
         quality: 'GOOD',
       },
-      _avg: { numericValue: true },
+      _avg: { value: true },
     });
 
-    return result._avg.numericValue ?? null;
+    return result._avg.value ?? null;
   }
 
   /**

@@ -40,6 +40,12 @@ const ANL002DetailedComparison = lazy(() => import('./pages/analysis/ANL002Detai
 const ANL003CycleAnalysis = lazy(() => import('./pages/analysis/ANL003CycleAnalysis'));
 const ANL004CycleDelay = lazy(() => import('./pages/analysis/ANL004CycleDelay'));
 const ANL005PowerQualityAnalysis = lazy(() => import('./pages/analysis/ANL005PowerQualityAnalysis'));
+const ANL006AirDetailedComparison = lazy(() => import('./pages/analysis/ANL006AirDetailedComparison'));
+const ANL007PeriodPowerComparison = lazy(() => import('./pages/analysis/ANL007PeriodPowerComparison'));
+const ANL008PeriodAirComparison = lazy(() => import('./pages/analysis/ANL008PeriodAirComparison'));
+const ANL009AdvPowerComparison = lazy(() => import('./pages/analysis/ANL009AdvPowerComparison'));
+const ANL010AdvAirComparison = lazy(() => import('./pages/analysis/ANL010AdvAirComparison'));
+const ANL011CycleSingleAnalysis = lazy(() => import('./pages/analysis/ANL011CycleSingleAnalysis'));
 // Settings
 const SET001PowerQuality = lazy(() => import('./pages/settings/SET001PowerQuality'));
 const SET002AirLeak = lazy(() => import('./pages/settings/SET002AirLeak'));
@@ -87,6 +93,12 @@ const router = createBrowserRouter([
       // Analysis
       { path: 'analysis/comparison', element: <ANL001Comparison /> },
       { path: 'analysis/detailed-comparison', element: <ANL002DetailedComparison /> },
+      { path: 'analysis/air-detailed-comparison', element: <ANL006AirDetailedComparison /> },
+      { path: 'analysis/period-power', element: <ANL007PeriodPowerComparison /> },
+      { path: 'analysis/period-air', element: <ANL008PeriodAirComparison /> },
+      { path: 'analysis/adv-power-comparison', element: <ANL009AdvPowerComparison /> },
+      { path: 'analysis/adv-air-comparison', element: <ANL010AdvAirComparison /> },
+      { path: 'analysis/cycle-single', element: <ANL011CycleSingleAnalysis /> },
       { path: 'analysis/cycle', element: <ANL003CycleAnalysis /> },
       { path: 'analysis/cycle-delay', element: <ANL004CycleDelay /> },
       { path: 'analysis/power-quality', element: <ANL005PowerQualityAnalysis /> },

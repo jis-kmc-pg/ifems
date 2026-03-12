@@ -229,21 +229,24 @@ enum DataQuality {
   UNCERTAIN
 }
 
+// 데이터 소스 유형 (VQTT: Value, Quality, Timestamp, Type)
+enum DataSourceType {
+  TEST           // 테스트 데이터
+  COMMISSIONING  // 시운전 데이터
+  REAL           // 실제 운영 데이터
+}
+
 // 태그 원본 데이터 (1초~1분 단위)
 // TimescaleDB Hypertable: timestamp를 파티셔닝 키로 사용
+// VQTT 포맷: Value, Quality, Timestamp, Type
 model TagDataRaw {
-  timestamp DateTime // 수집 시각 (TimescaleDB 파티셔닝 키)
+  timestamp DateTime       // 수집 시각 (TimescaleDB 파티셔닝 키)
   tagId     String
-  tag       Tag      @relation(fields: [tagId], references: [id])
+  tag       Tag            @relation(fields: [tagId], references: [id])
 
-  // Key-Value 데이터
-  numericValue Float?
-  stringValue  String?
-  booleanValue Boolean?
-
-  // 품질
-  quality     DataQuality @default(GOOD)
-  collectorId String? // PLC/SCADA 구분
+  value     Float?         // 측정값 (VQTT - Value)
+  quality   DataQuality    @default(GOOD)        // 품질 (VQTT - Quality)
+  type      DataSourceType @default(TEST)        // 소스 유형 (VQTT - Type)
 
   @@id([timestamp, tagId]) // Composite Primary Key for TimescaleDB
   @@map("tag_data_raw")

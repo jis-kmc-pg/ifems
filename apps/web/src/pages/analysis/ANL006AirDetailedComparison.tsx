@@ -26,14 +26,14 @@ function timeRangeToIso(range: { start: string; end: string } | null, date: stri
   return { start: `${date}T${range.start}+09:00`, end: `${date}T${range.end}+09:00` };
 }
 
-export default function ANL002DetailedComparison() {
+export default function ANL006AirDetailedComparison() {
   // ── 트리 상태 ──
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['plant', 'block']));
   const { data: tree } = useQuery({ queryKey: ['anl-tree'], queryFn: getFacilityTree });
   const { data: tagCountMap } = useQuery({
-    queryKey: ['anl002-tag-counts'],
-    queryFn: () => getFacilityTagCounts('elec'),
+    queryKey: ['anl006-tag-counts'],
+    queryFn: () => getFacilityTagCounts('air'),
   });
   const facilityIds = Array.from(checked).filter(id => !GROUP_IDS.includes(id));
 
@@ -57,33 +57,33 @@ export default function ANL002DetailedComparison() {
   const r5 = timeRangeToIso(zoomedTimeRange, getDate(facilityIds[5] ?? ''));
 
   const q0 = useQuery<TrendResult>({
-    queryKey: ['anl002', facilityIds[0], r0.start, r0.end, currentInterval],
-    queryFn: () => getFacilityTrendData(facilityIds[0]!, r0.start, r0.end, currentInterval as '10s' | '1s', 'elec') as Promise<TrendResult>,
+    queryKey: ['anl006', facilityIds[0], r0.start, r0.end, currentInterval],
+    queryFn: () => getFacilityTrendData(facilityIds[0]!, r0.start, r0.end, currentInterval as '10s' | '1s', 'air') as Promise<TrendResult>,
     enabled: !!facilityIds[0],
   });
   const q1 = useQuery<TrendResult>({
-    queryKey: ['anl002', facilityIds[1], r1.start, r1.end, currentInterval],
-    queryFn: () => getFacilityTrendData(facilityIds[1]!, r1.start, r1.end, currentInterval as '10s' | '1s', 'elec') as Promise<TrendResult>,
+    queryKey: ['anl006', facilityIds[1], r1.start, r1.end, currentInterval],
+    queryFn: () => getFacilityTrendData(facilityIds[1]!, r1.start, r1.end, currentInterval as '10s' | '1s', 'air') as Promise<TrendResult>,
     enabled: !!facilityIds[1],
   });
   const q2 = useQuery<TrendResult>({
-    queryKey: ['anl002', facilityIds[2], r2.start, r2.end, currentInterval],
-    queryFn: () => getFacilityTrendData(facilityIds[2]!, r2.start, r2.end, currentInterval as '10s' | '1s', 'elec') as Promise<TrendResult>,
+    queryKey: ['anl006', facilityIds[2], r2.start, r2.end, currentInterval],
+    queryFn: () => getFacilityTrendData(facilityIds[2]!, r2.start, r2.end, currentInterval as '10s' | '1s', 'air') as Promise<TrendResult>,
     enabled: !!facilityIds[2],
   });
   const q3 = useQuery<TrendResult>({
-    queryKey: ['anl002', facilityIds[3], r3.start, r3.end, currentInterval],
-    queryFn: () => getFacilityTrendData(facilityIds[3]!, r3.start, r3.end, currentInterval as '10s' | '1s', 'elec') as Promise<TrendResult>,
+    queryKey: ['anl006', facilityIds[3], r3.start, r3.end, currentInterval],
+    queryFn: () => getFacilityTrendData(facilityIds[3]!, r3.start, r3.end, currentInterval as '10s' | '1s', 'air') as Promise<TrendResult>,
     enabled: !!facilityIds[3],
   });
   const q4 = useQuery<TrendResult>({
-    queryKey: ['anl002', facilityIds[4], r4.start, r4.end, currentInterval],
-    queryFn: () => getFacilityTrendData(facilityIds[4]!, r4.start, r4.end, currentInterval as '10s' | '1s', 'elec') as Promise<TrendResult>,
+    queryKey: ['anl006', facilityIds[4], r4.start, r4.end, currentInterval],
+    queryFn: () => getFacilityTrendData(facilityIds[4]!, r4.start, r4.end, currentInterval as '10s' | '1s', 'air') as Promise<TrendResult>,
     enabled: !!facilityIds[4],
   });
   const q5 = useQuery<TrendResult>({
-    queryKey: ['anl002', facilityIds[5], r5.start, r5.end, currentInterval],
-    queryFn: () => getFacilityTrendData(facilityIds[5]!, r5.start, r5.end, currentInterval as '10s' | '1s', 'elec') as Promise<TrendResult>,
+    queryKey: ['anl006', facilityIds[5], r5.start, r5.end, currentInterval],
+    queryFn: () => getFacilityTrendData(facilityIds[5]!, r5.start, r5.end, currentInterval as '10s' | '1s', 'air') as Promise<TrendResult>,
     enabled: !!facilityIds[5],
   });
 
@@ -104,7 +104,6 @@ export default function ANL002DetailedComparison() {
       const tags: TagInfo[] = result.tags ?? [];
       allFacilityTags[fid] = tags;
 
-      // 설비당 기본 색상 (같은 설비의 태그는 같은 색상)
       const facilityColor = FACILITY_COLORS[qIdx % FACILITY_COLORS.length];
 
       tags.forEach(tag => {
@@ -118,7 +117,6 @@ export default function ANL002DetailedComparison() {
         colorIdx++;
       });
 
-      // 시간별 데이터 병합 (time-of-day 기준)
       const data: Record<string, any>[] = result.data ?? [];
       data.forEach((pt: any) => {
         if (!timeMap.has(pt.time)) {
@@ -211,8 +209,8 @@ export default function ANL002DetailedComparison() {
   return (
     <div className="flex flex-col gap-4 h-full">
       <PageHeader
-        title="전력 상세 비교"
-        description={`설비별 전력 순시값 트렌드 비교 | 해상도: ${formatInterval(currentInterval)}`}
+        title="에어 상세 비교"
+        description={`설비별 에어 순시값 트렌드 비교 | 해상도: ${formatInterval(currentInterval)}`}
       />
 
       <div className="flex gap-3 flex-1 min-h-0">
@@ -233,7 +231,6 @@ export default function ANL002DetailedComparison() {
 
         {/* ── 메인 콘텐츠 (우) ── */}
         <div className="flex-1 flex flex-col gap-3 min-h-0">
-          {/* 설비 박스 (선택된 설비마다 1개) */}
           {facilityIds.length === 0 ? (
             <div className="flex-shrink-0 border-2 border-dashed border-gray-200 dark:border-gray-600 rounded-lg px-6 py-4 flex items-center justify-center">
               <span className="text-sm text-gray-400 dark:text-gray-500">좌측 트리에서 비교할 설비를 선택해 주세요</span>
@@ -287,14 +284,13 @@ export default function ANL002DetailedComparison() {
             </div>
           )}
 
-          {/* 차트 */}
           <ChartCard
-            title={facilityIds.length === 0 ? '전력 순시값 트렌드' : `전력 순시값 트렌드 (${facilityIds.length}개 설비)`}
+            title={facilityIds.length === 0 ? '에어 순시값 트렌드' : `에어 순시값 트렌드 (${facilityIds.length}개 설비)`}
             subtitle={`해상도: ${formatInterval(currentInterval)}`}
             className="flex-1 min-h-0"
-            chartId="anl002-chart"
+            chartId="anl006-chart"
             exportData={chartData}
-            exportFilename="전력상세비교"
+            exportFilename="에어상세비교"
             minHeight={0}
             actions={
               <DynamicZoomBar
@@ -320,8 +316,8 @@ export default function ANL002DetailedComparison() {
                 data={chartData}
                 series={chartSeries}
                 xKey="time"
-                yLabel="순시값(kW)"
-                syncKey="anl002"
+                yLabel="순시값(m³/min)"
+                syncKey="anl006"
                 showLegend={true}
                 onZoomChange={handleZoom}
                 isLoading={anyLoading}

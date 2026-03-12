@@ -139,7 +139,7 @@ export class SettingsService {
   private getDefaultThresholds(category: string): { threshold1: number; threshold2: number } {
     switch (category) {
       case 'power_quality':
-        return { threshold1: 5.0, threshold2: 85 };   // 불평형률 임계(%), 역률 기준(%)
+        return { threshold1: 1.0, threshold2: 93 };   // 불평형률 임계(%), 역률 기준(%)
       case 'air_leak':
         return { threshold1: 5000, threshold2: 20 };   // 비생산 에어 기준(L), 누기율 임계(%)
       case 'cycle_alert':
@@ -1779,5 +1779,54 @@ export class SettingsService {
       await this.saveSystemSetting(key, val.value, val.description);
     }
     return this.getSystemSettings();
+  }
+
+  // ──────────────────────────────────────────────
+  // CYCLE_MMS_MAPPING 관리
+  // ──────────────────────────────────────────────
+
+  async getCycleMappings() {
+    this.logger.log('Fetching cycle mappings');
+
+    const rows = await this.prisma.$queryRawUnsafe<any[]>(`
+      SELECT m."MACH_ID" as "machId", m."TAG_NAME" as "tagName",
+        m."PLANT_CD" as "plantCd", m."LINE_CD" as "lineCd",
+        m."MCN_CD" as "mcnCd", m."ENERGY_TYPE" as "energyType",
+        m."TARGET_YN" as "targetYn",
+        f.id as "facilityId", f.code as "facilityCode", f.name as "facilityName"
+      FROM "CYCLE_MMS_MAPPING" m
+      LEFT JOIN tags t ON t."tagName" = m."TAG_NAME"
+      LEFT JOIN facilities f ON f.id = t."facilityId"
+      ORDER BY m."MACH_ID", m."TAG_NAME"
+    `);
+
+    return rows;
+  }
+
+  async updateCycleMapping(machId: number, tagName: string, data: { targetYn?: number; machId?: number }) {
+    this.logger.log(`Updating cycle mapping: MACH_ID=${machId}, TAG_NAME=${tagName}`);
+
+    const sets: string[] = [];
+    const params: any[] = [];
+    let paramIdx = 1;
+
+    if (data.targetYn !== undefined) {
+      sets.push(`"TARGET_YN" = $${paramIdx++}`);
+      params.push(data.targetYn);
+    }
+    if (data.machId !== undefined) {
+      sets.push(`"MACH_ID" = $${paramIdx++}`);
+      params.push(data.machId);
+    }
+
+    if (sets.length === 0) return { updated: 0 };
+
+    params.push(machId, tagName);
+    const result = await this.prisma.$executeRawUnsafe(
+      `UPDATE "CYCLE_MMS_MAPPING" SET ${sets.join(', ')} WHERE "MACH_ID" = $${paramIdx++} AND "TAG_NAME" = $${paramIdx}`,
+      ...params,
+    );
+
+    return { updated: result };
   }
 }

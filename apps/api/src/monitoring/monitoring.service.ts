@@ -463,7 +463,7 @@ export class MonitoringService {
               - date_trunc('day', t.timestamp AT TIME ZONE 'Asia/Seoul')
             ))::INTEGER as epoch,
             tag."energyType" as "energyType",
-            t."numericValue" as "avgValue"
+            t.value as "avgValue"
           FROM tag_data_raw t
           JOIN tags tag ON t."tagId" = tag.id
           JOIN facilities f ON tag."facilityId" = f.id
@@ -480,7 +480,7 @@ export class MonitoringService {
               - date_trunc('day', t.timestamp AT TIME ZONE 'Asia/Seoul')
             ))::INTEGER as epoch,
             tag."energyType" as "energyType",
-            t."numericValue" as "avgValue"
+            t.value as "avgValue"
           FROM tag_data_raw t
           JOIN tags tag ON t."tagId" = tag.id
           JOIN facilities f ON tag."facilityId" = f.id
@@ -1911,7 +1911,7 @@ export class MonitoringService {
           SELECT
             time_bucket('${bucketInterval}', t.timestamp) AS bucket,
             t."tagId",
-            LAST(t."numericValue", t.timestamp) - FIRST(t."numericValue", t.timestamp) AS raw_diff
+            LAST(t.value, t.timestamp) - FIRST(t.value, t.timestamp) AS raw_diff
           FROM tag_data_raw t
           JOIN tags tag ON t."tagId" = tag.id
           WHERE ${tagFacWhere}t.timestamp >= ${pS}::timestamp
@@ -1941,7 +1941,7 @@ export class MonitoringService {
           SELECT
             time_bucket('${bucketInterval}', t.timestamp) AS bucket,
             t."tagId",
-            LAST(t."numericValue", t.timestamp) - FIRST(t."numericValue", t.timestamp) AS raw_diff
+            LAST(t.value, t.timestamp) - FIRST(t.value, t.timestamp) AS raw_diff
           FROM tag_data_raw t
           JOIN tags tag ON t."tagId" = tag.id
           WHERE ${tagFacWhere}t.timestamp >= ${pPS}::timestamp

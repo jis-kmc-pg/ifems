@@ -507,4 +507,24 @@ export class SettingsController {
   async deleteProductionCalendar(@Param('id') id: string) {
     return this.settingsService.deleteProductionCalendar(id);
   }
+
+  // ──────────────────────────────────────────────
+  // 싸이클 매핑 API (CYCLE_MMS_MAPPING)
+  // ──────────────────────────────────────────────
+  @Get('cycle-mapping')
+  @ApiOperation({ summary: '싸이클 MACH_ID ↔ 설비 매핑 목록 조회' })
+  async getCycleMappings() {
+    return this.settingsService.getCycleMappings();
+  }
+
+  @Put('cycle-mapping')
+  @ApiOperation({ summary: '싸이클 매핑 수정 (TARGET_YN, MACH_ID)' })
+  async updateCycleMapping(
+    @Body() body: { machId: number; tagName: string; targetYn?: number; newMachId?: number },
+  ) {
+    return this.settingsService.updateCycleMapping(body.machId, body.tagName, {
+      targetYn: body.targetYn,
+      machId: body.newMachId,
+    });
+  }
 }

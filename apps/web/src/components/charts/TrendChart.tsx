@@ -28,6 +28,15 @@ interface TrendChartProps {
   isLoading?: boolean; // 동적 해상도: 로딩 상태
   loadingMessage?: string; // 동적 해상도: 로딩 메시지
   anomalies?: AnomalyEvent[]; // 이상 데이터 구간 (반투명 영역 표시)
+  verticalMarkers?: VerticalMarker[]; // 수직선 마커 (스텝 경계 등)
+  spanGaps?: boolean; // null 갭 연결 여부 (기본: line/area=true, bar=false)
+}
+
+export interface VerticalMarker {
+  xValue: string; // xKey 값 (xLabels에서 매칭)
+  color: string;
+  label?: string;
+  dashed?: boolean;
 }
 
 const TrendChart = memo(({
@@ -44,6 +53,8 @@ const TrendChart = memo(({
   isLoading = false,
   loadingMessage,
   anomalies,
+  verticalMarkers,
+  spanGaps: spanGapsProp,
 }: TrendChartProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartAreaRef = useRef<HTMLDivElement>(null); // 차트 영역 직접 측정용
@@ -53,6 +64,8 @@ const TrendChart = memo(({
   const zoomLockRef = useRef<boolean>(false); // zoom lock (interval당 1번만)
   const [dims, setDims] = useState({ width: width || 800, height: height || 300 });
   const [cursorIdx, setCursorIdx] = useState<number | null>(null);
+  const [cursorPos, setCursorPos] = useState<{ left: number; top: number } | null>(null);
+  const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
   const [isZoomed, setIsZoomed] = useState(false);
   const [isProcessingZoom, setIsProcessingZoom] = useState(false);
 
@@ -362,11 +375,13 @@ const TrendChart = memo(({
           }
 
           return {
+            show: !hiddenSeries.has(s.key),
             label: s.label,
             stroke: s.color,
             width: s.width ?? (isBar ? 1 : 2),
             fill: fillColor,
             paths: isBar ? uPlot.paths.bars!({ size: [0.6] }) : undefined,
+            spanGaps: spanGapsProp ?? !isBar, // line/area: null 갭 건너뛰고 선 연결 (비교 차트 필수)
             points: {
               show: false,
             },
@@ -417,11 +432,11 @@ const TrendChart = memo(({
             const idx = Math.round(v);
             if (idx < 0 || idx >= xLabels.length) return '';
             const label = String(xLabels[idx]);
-            // ISO8601("2026-03-05T05:15:00Z") → "05:15" 변환
+            // ISO8601("2026-03-05T05:15:00Z") → "05:15:00" 변환
             const tIdx = label.indexOf('T');
-            if (tIdx !== -1) return label.slice(tIdx + 1, tIdx + 6);
-            // "HH:MM:SS" → "HH:MM"
-            if (label.length >= 8 && label[2] === ':') return label.slice(0, 5);
+            if (tIdx !== -1) return label.slice(tIdx + 1, tIdx + 9);
+            // "HH:mm:ss" 그대로 (10초/1초 해상도 필수)
+            if (label.length >= 8 && label[2] === ':') return label.slice(0, 8);
             return label;
           }),
         },
@@ -491,6 +506,11 @@ const TrendChart = memo(({
           (u) => {
             const idx = u.cursor.idx;
             setCursorIdx(idx ?? null);
+            if (idx != null && u.cursor.left != null && u.cursor.top != null && u.cursor.left > 0) {
+              setCursorPos({ left: u.cursor.left, top: u.cursor.top });
+            } else {
+              setCursorPos(null);
+            }
           },
         ],
         // ✅ 항상 등록: 줌 상태 추적 (모든 페이지에서 < > 버튼 동작)
@@ -564,8 +584,8 @@ const TrendChart = memo(({
             },
           ],
         }),
-        // draw hooks: currentTime 수직선 + anomaly 영역
-        ...((currentTime || (anomalies && anomalies.length > 0)) && {
+        // draw hooks: currentTime 수직선 + anomaly 영역 + verticalMarkers
+        ...((currentTime || (anomalies && anomalies.length > 0) || (verticalMarkers && verticalMarkers.length > 0)) && {
           draw: [
             (u: uPlot) => {
               const ctx = u.ctx;
@@ -622,6 +642,31 @@ const TrendChart = memo(({
                   ctx.restore();
                 }
               }
+
+              // 3. verticalMarkers (스텝 경계선 등)
+              if (verticalMarkers && verticalMarkers.length > 0) {
+                ctx.save();
+                for (const marker of verticalMarkers) {
+                  const xIdx = xLabels.findIndex((label) => String(label) === marker.xValue);
+                  if (xIdx === -1) continue;
+                  const xPos = u.valToPos(xIdx, 'x', true);
+                  ctx.strokeStyle = marker.color;
+                  ctx.lineWidth = 1.5;
+                  ctx.setLineDash(marker.dashed !== false ? [4, 3] : []);
+                  ctx.beginPath();
+                  ctx.moveTo(xPos, u.bbox.top);
+                  ctx.lineTo(xPos, u.bbox.top + u.bbox.height);
+                  ctx.stroke();
+
+                  if (marker.label) {
+                    ctx.fillStyle = marker.color;
+                    ctx.font = 'bold 10px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(marker.label, xPos, u.bbox.top + 12);
+                  }
+                }
+                ctx.restore();
+              }
             },
           ],
         }),
@@ -631,7 +676,7 @@ const TrendChart = memo(({
       },
       padding: [10, 16, 20, 8],
     };
-  }, [series, dims, xKey, yLabel, syncKey, showLegend, currentTime, xLabels, anomalies]);
+  }, [series, dims, xKey, yLabel, syncKey, showLegend, currentTime, xLabels, anomalies, verticalMarkers, spanGapsProp, hiddenSeries]);
 
   // 직접 uPlot 인스턴스 관리 (uplot-react 대신 → React 19 호환성 보장)
   const chartTargetRef = useRef<HTMLDivElement>(null);
@@ -658,77 +703,32 @@ const TrendChart = memo(({
 
   return (
     <div ref={containerRef} className="flex flex-col relative w-full h-full">
-      {/* 커스텀 범례 (마우스 오버 시 시간 + 값 표시) */}
+      {/* 커스텀 범례 (클릭으로 시리즈 표시/숨기기) */}
       {showLegend && (
-        <div className="flex items-center justify-between px-2 py-1 text-xs">
-          <div className="flex items-center gap-4">
-            {/* 현재 시간 표시 */}
-            {cursorIdx !== null && sampledData[cursorIdx] && (
-              <div className="text-gray-600 dark:text-gray-400 font-semibold">
-                ⏰ {(() => {
-                  const raw = String(sampledData[cursorIdx][xKey]);
-                  const tIdx = raw.indexOf('T');
-                  return tIdx !== -1 ? raw.slice(tIdx + 1, tIdx + 9).replace(/Z$/, '') : raw;
-                })()}
-              </div>
-            )}
-            {/* 각 시리즈 값 표시 */}
-            {series.map((s, idx) => {
-              const dataIdx = cursorIdx !== null ? cursorIdx : null;
-              const value = dataIdx !== null && sampledData[dataIdx]
-                ? sampledData[dataIdx][s.key]
-                : null;
-
-              // 값이 있을 때만 표시
-              const hasValue = value !== null && value !== undefined;
-              const displayValue = hasValue
-                ? typeof value === 'number' ? value.toFixed(2) : value
-                : null;
-
-              return (
-                <div key={s.key} className="flex items-center gap-1.5">
-                  <div
-                    className="w-3 h-3 rounded-sm"
-                    style={{ backgroundColor: s.color }}
-                  />
-                  <span className="text-gray-700 dark:text-gray-300">
-                    {s.label}
-                    {hasValue && displayValue && (
-                      <>: <span className="font-mono font-semibold">{displayValue}</span></>
-                    )}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          {/* 줌 컨트롤: < [리셋] > */}
-          {isZoomed && (
-            <div className="flex items-center gap-1">
+        <div className="flex items-center flex-wrap gap-3 px-2 py-1 text-xs">
+          {series.map(s => {
+            const isHidden = hiddenSeries.has(s.key);
+            return (
               <button
-                onClick={() => handlePan('left')}
-                disabled={!panState.canLeft}
-                className="px-1.5 py-1 text-xs font-bold bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed rounded transition-colors"
-                title="왼쪽 이동"
+                key={s.key}
+                onClick={() => setHiddenSeries(prev => {
+                  const next = new Set(prev);
+                  if (next.has(s.key)) next.delete(s.key);
+                  else next.add(s.key);
+                  return next;
+                })}
+                className={`flex items-center gap-1.5 cursor-pointer select-none transition-opacity ${isHidden ? 'opacity-35' : 'opacity-100'} hover:opacity-75`}
               >
-                &lt;
+                <span
+                  className="w-3 h-3 rounded-sm flex-shrink-0"
+                  style={{ backgroundColor: s.color }}
+                />
+                <span className={`text-gray-700 dark:text-gray-300 ${isHidden ? 'line-through' : ''}`}>
+                  {s.label}
+                </span>
               </button>
-              <button
-                onClick={handleReset}
-                className="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded transition-colors"
-                title="확대 해제"
-              >
-                리셋
-              </button>
-              <button
-                onClick={() => handlePan('right')}
-                disabled={!panState.canRight}
-                className="px-1.5 py-1 text-xs font-bold bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed rounded transition-colors"
-                title="오른쪽 이동"
-              >
-                &gt;
-              </button>
-            </div>
-          )}
+            );
+          })}
         </div>
       )}
       {/* 차트 */}
@@ -740,6 +740,48 @@ const TrendChart = memo(({
         `}>
           <div ref={chartTargetRef} />
         </div>
+        {/* 플로팅 툴팁 */}
+        {cursorIdx != null && cursorPos && sampledData[cursorIdx] && (
+          <div
+            className="absolute z-20 pointer-events-none bg-white/95 dark:bg-[#1A1A2E]/95 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg px-3 py-2 text-xs"
+            style={{
+              left: cursorPos.left + 16,
+              top: Math.max(4, cursorPos.top - 20),
+              maxWidth: 280,
+            }}
+          >
+            <div className="font-semibold text-gray-700 dark:text-gray-200 mb-1.5 border-b border-gray-100 dark:border-gray-700 pb-1">
+              {(() => {
+                const raw = String(sampledData[cursorIdx][xKey]);
+                const tIdx = raw.indexOf('T');
+                return tIdx !== -1 ? raw.slice(tIdx + 1, tIdx + 9).replace(/Z$/, '') : raw;
+              })()}
+            </div>
+            {series.map(s => {
+              if (hiddenSeries.has(s.key)) return null;
+              const row = sampledData[cursorIdx!];
+              const val = row[s.key];
+              if (val == null) return null;
+              const realTime = row[`${s.key}__t`];
+              return (
+                <div key={s.key} className="flex items-center justify-between gap-3 py-0.5">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: s.color }} />
+                    <span className="text-gray-600 dark:text-gray-300 truncate">{s.label}</span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {realTime && (
+                      <span className="text-[10px] text-gray-400 dark:text-gray-500 font-mono">{realTime}</span>
+                    )}
+                    <span className="font-mono font-semibold text-gray-800 dark:text-white">
+                      {typeof val === 'number' ? val.toFixed(2) : val}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
         {/* 로딩 인디케이터 (작은 스피너만) */}
         {(isLoading || isProcessingZoom) && (
           <div className="absolute top-2 right-2 flex items-center gap-2 bg-white/90 dark:bg-gray-800/90 px-3 py-1.5 rounded-lg shadow-sm z-10">

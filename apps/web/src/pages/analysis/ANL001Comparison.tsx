@@ -7,7 +7,7 @@ import TreeCheckbox from '../../components/ui/TreeCheckbox';
 import FilterBar from '../../components/ui/FilterBar';
 import TrendChart from '../../components/charts/TrendChart';
 import { getFacilityTree } from '../../services/analysis';
-import { SCREEN_INITIAL_INTERVAL, SCREEN_MAX_DEPTH } from '../../lib/constants';
+import { SCREEN_INITIAL_INTERVAL } from '../../lib/constants';
 import { facilityComparisonSeries, FACILITY_COLORS } from '../../lib/chart-series';
 import { ENERGY_TYPE_BACKEND_OPTIONS as TYPE_OPTIONS } from '../../lib/filter-options';
 import { useDynamicResolution } from '../../hooks/useDynamicResolution';
@@ -36,6 +36,7 @@ export default function ANL001Comparison() {
   const [date, setDate] = useState(TODAY);
 
   const initialInterval = (SCREEN_INITIAL_INTERVAL['ANL-001'] || '15m') as Interval;
+  const zoomLevels: Interval[] = ['15m', '5m', '1m'];
 
   const { data: tree } = useQuery({ queryKey: ['anl-tree'], queryFn: getFacilityTree });
 
@@ -51,42 +52,42 @@ export default function ANL001Comparison() {
     facilityId: facilityIds[0] || '',
     metric: type === 'elec' ? 'power' : 'air',
     enabled: !!facilityIds[0],
-    maxDepth: SCREEN_MAX_DEPTH['ANL-001'],
+    zoomLevels,
   });
   const dynamicQuery1 = useDynamicResolution({
     initialInterval, startTime, endTime,
     facilityId: facilityIds[1] || '',
     metric: type === 'elec' ? 'power' : 'air',
     enabled: !!facilityIds[1],
-    maxDepth: SCREEN_MAX_DEPTH['ANL-001'],
+    zoomLevels,
   });
   const dynamicQuery2 = useDynamicResolution({
     initialInterval, startTime, endTime,
     facilityId: facilityIds[2] || '',
     metric: type === 'elec' ? 'power' : 'air',
     enabled: !!facilityIds[2],
-    maxDepth: SCREEN_MAX_DEPTH['ANL-001'],
+    zoomLevels,
   });
   const dynamicQuery3 = useDynamicResolution({
     initialInterval, startTime, endTime,
     facilityId: facilityIds[3] || '',
     metric: type === 'elec' ? 'power' : 'air',
     enabled: !!facilityIds[3],
-    maxDepth: SCREEN_MAX_DEPTH['ANL-001'],
+    zoomLevels,
   });
   const dynamicQuery4 = useDynamicResolution({
     initialInterval, startTime, endTime,
     facilityId: facilityIds[4] || '',
     metric: type === 'elec' ? 'power' : 'air',
     enabled: !!facilityIds[4],
-    maxDepth: SCREEN_MAX_DEPTH['ANL-001'],
+    zoomLevels,
   });
   const dynamicQuery5 = useDynamicResolution({
     initialInterval, startTime, endTime,
     facilityId: facilityIds[5] || '',
     metric: type === 'elec' ? 'power' : 'air',
     enabled: !!facilityIds[5],
-    maxDepth: SCREEN_MAX_DEPTH['ANL-001'],
+    zoomLevels,
   });
 
   const dynamicQueries = [dynamicQuery0, dynamicQuery1, dynamicQuery2, dynamicQuery3, dynamicQuery4, dynamicQuery5];
@@ -113,7 +114,7 @@ export default function ANL001Comparison() {
   return (
     <div className="flex flex-col gap-4 h-full">
       <PageHeader
-        title="비교 분석"
+        title="사용량 비교분석"
         description={`설비 비교 | 해상도: ${formatInterval(currentInterval)}`}
       />
 
@@ -191,7 +192,7 @@ export default function ANL001Comparison() {
           {facilityIds.length > 0 && (
             <div className="flex gap-2 flex-shrink-0 flex-wrap">
               {facilityIds.map((id, idx) => {
-                const vals = dynamicQueries[idx]?.data?.map((d: any) => d[metricKey] ?? 0) ?? [];
+                const vals = dynamicQueries[idx]?.data?.map((d: any) => Number(d[metricKey] ?? 0)) ?? [];
                 const total = vals.reduce((s: number, v: number) => s + v, 0);
                 return (
                   <div key={id} className="bg-white dark:bg-[#16213E] rounded-lg border border-gray-100 dark:border-gray-700 px-3 py-2 flex items-center gap-2 shadow-sm">

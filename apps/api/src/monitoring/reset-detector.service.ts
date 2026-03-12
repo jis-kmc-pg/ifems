@@ -75,12 +75,12 @@ export class ResetDetectorService {
         WITH value_changes AS (
           SELECT
             timestamp,
-            "numericValue" as current_value,
-            LAG("numericValue") OVER (ORDER BY timestamp) as previous_value
+            value as current_value,
+            LAG(value) OVER (ORDER BY timestamp) as previous_value
           FROM tag_data_raw
           WHERE "tagId" = ${tagId}
             AND timestamp >= NOW() - INTERVAL '2 minutes'
-            AND "numericValue" IS NOT NULL
+            AND value IS NOT NULL
           ORDER BY timestamp
         )
         SELECT

@@ -7,6 +7,7 @@ import { StatusBadge } from '../../components/ui/TrafficLight';
 import { getEnergyRanking } from '../../services/monitoring';
 import type { FacilityEnergy } from '../../services/mock/facilities';
 import { COLORS } from '../../lib/constants';
+import { LINE_ITEMS } from '../../lib/filter-options';
 import { useLineFilter, useEnergyFilter } from '../../hooks/useCommonFilters';
 
 export default function MON003EnergyRanking() {

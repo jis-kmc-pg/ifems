@@ -72,7 +72,12 @@ export const GNB_MENUS = [
 // ──────────────────────────────────────────────
 // 사이드바 메뉴 구조
 // ──────────────────────────────────────────────
-export const SIDEBAR_MENUS = {
+export type SidebarMenuItem = { id: string; label: string; path: string };
+export type SidebarGroupHeader = { group: string };
+export type SidebarEntry = SidebarMenuItem | SidebarGroupHeader;
+export type GnbMenuId = 'monitoring' | 'dashboard' | 'alert' | 'analysis' | 'settings';
+
+export const SIDEBAR_MENUS: Record<GnbMenuId, SidebarEntry[]> = {
   monitoring: [
     { id: 'overview', label: '종합 현황', path: '/monitoring/overview' },
     { id: 'line-detail', label: '라인별 상세', path: '/monitoring/line-detail' },
@@ -98,10 +103,21 @@ export const SIDEBAR_MENUS = {
     { id: 'cycle-anomaly-history', label: '싸이클 이상 이력', path: '/alert/cycle-anomaly-history' },
   ],
   analysis: [
-    { id: 'comparison', label: '비교 분석', path: '/analysis/comparison' },
-    { id: 'detailed-comparison', label: '상세 비교 분석', path: '/analysis/detailed-comparison' },
-    { id: 'cycle', label: '싸이클 분석', path: '/analysis/cycle' },
-    { id: 'cycle-delay', label: '싸이클 타임 지연', path: '/analysis/cycle-delay' },
+    { group: '설비별 추이 (일별)' },
+    { id: 'comparison', label: '사용량 추이 분석', path: '/analysis/comparison' },
+    { id: 'detailed-comparison', label: '전력 추이 분석', path: '/analysis/detailed-comparison' },
+    { id: 'air-detailed-comparison', label: '에어 추이 분석', path: '/analysis/air-detailed-comparison' },
+    { group: '동일설비 추이 (일별)' },
+    { id: 'period-power', label: '전력 추이 분석', path: '/analysis/period-power' },
+    { id: 'period-air', label: '에어 추이 분석', path: '/analysis/period-air' },
+    { group: '상세비교' },
+    { id: 'adv-power-comparison', label: '전력 상세 비교', path: '/analysis/adv-power-comparison' },
+    { id: 'adv-air-comparison', label: '에어 상세 비교', path: '/analysis/adv-air-comparison' },
+    { group: '싸이클 분석' },
+    { id: 'cycle-single', label: '싸이클 분석', path: '/analysis/cycle-single' },
+    { id: 'cycle', label: '싸이클 비교 분석', path: '/analysis/cycle' },
+    // { id: 'cycle-delay', label: '싸이클 타임 지연', path: '/analysis/cycle-delay' },
+    { group: '품질 분석' },
     { id: 'power-quality', label: '전력 품질 분석', path: '/analysis/power-quality' },
   ],
   settings: [
@@ -120,9 +136,7 @@ export const SIDEBAR_MENUS = {
     { id: 'cycle-energy-alert', label: '싸이클당 에너지 알림', path: '/settings/cycle-energy-alert' },
     { id: 'system', label: '시스템 설정', path: '/settings/system' },
   ],
-} as const;
-
-export type GnbMenuId = keyof typeof SIDEBAR_MENUS;
+};
 
 // ──────────────────────────────────────────────
 // 환경 설정

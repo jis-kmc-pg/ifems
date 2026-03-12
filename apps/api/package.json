@@ -25,7 +25,8 @@
     "db:import": "ts-node scripts/import-master-data.ts",
     "db:timescale": "ts-node scripts/setup-timescaledb.ts",
     "db:check": "ts-node scripts/check-data-collection.ts",
-    "db:pg-version": "ts-node scripts/check-postgres-version.ts"
+    "db:pg-version": "ts-node scripts/check-postgres-version.ts",
+    "collector": "npx tsx scripts/data-collector-standalone.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

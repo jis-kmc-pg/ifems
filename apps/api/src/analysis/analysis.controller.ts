@@ -5,7 +5,9 @@ import {
   FacilityHourlyQueryDto,
   DetailedComparisonDto,
   CycleListQueryDto,
+  CycleRangeQueryDto,
   CycleWaveformQueryDto,
+  CycleStepsQueryDto,
   PowerQualityAnalysisDto,
 } from './dto/analysis-query.dto';
 
@@ -18,6 +20,13 @@ export class AnalysisController {
   @ApiOperation({ summary: '설비 트리 조회' })
   async getFacilityTree() {
     return this.analysisService.getFacilityTree();
+  }
+
+  @Get('facilities/tag-counts')
+  @ApiOperation({ summary: '설비별 트렌드 태그 수 조회' })
+  @ApiQuery({ name: 'energyType', required: false, description: '에너지 유형 필터 (elec, air)' })
+  async getFacilityTagCounts(@Query('energyType') energyType?: string) {
+    return this.analysisService.getFacilityTagCounts(energyType);
   }
 
   @Get('facility/hourly')
@@ -43,6 +52,22 @@ export class AnalysisController {
     return this.analysisService.getCycleList(query.facilityId);
   }
 
+  @Get('cycles/range')
+  @ApiOperation({ summary: '시간범위 내 싸이클 목록 (ANL009/010 타임라인)' })
+  @ApiQuery({ name: 'facilityId', required: true })
+  @ApiQuery({ name: 'start', required: true, description: 'ISO 8601 시작' })
+  @ApiQuery({ name: 'end', required: true, description: 'ISO 8601 종료' })
+  async getCyclesInRange(@Query() query: CycleRangeQueryDto) {
+    return this.analysisService.getCyclesInRange(query.facilityId, query.start, query.end);
+  }
+
+  @Get('cycles/steps')
+  @ApiOperation({ summary: '싸이클 내 스텝 목록 (ANL011)' })
+  @ApiQuery({ name: 'materialId', required: true, description: 'MATERIAL_ID (= CycleRangeItem.id)' })
+  async getCycleSteps(@Query() query: CycleStepsQueryDto) {
+    return this.analysisService.getCycleSteps(query.materialId);
+  }
+
   @Get('cycle/waveform')
   @ApiOperation({ summary: '싸이클 파형 데이터' })
   @ApiQuery({ name: 'cycleId', required: true })
@@ -63,5 +88,33 @@ export class AnalysisController {
   async getPowerQualityAnalysis(@Query() query: PowerQualityAnalysisDto) {
     const ids = query.facilityIds ? query.facilityIds.split(',') : [];
     return this.analysisService.getPowerQualityAnalysis(ids, query.date);
+  }
+
+  @Get('facility/trend-tags')
+  @ApiOperation({ summary: '설비의 트렌드 태그 목록 (순시 ENERGY)' })
+  @ApiQuery({ name: 'facilityId', required: true })
+  async getFacilityTrendTags(@Query('facilityId') facilityId: string) {
+    return this.analysisService.getFacilityTrendTags(facilityId);
+  }
+
+  @Get('facility/trend')
+  @ApiOperation({ summary: '설비별 트렌드 태그 순시값 시계열 조회' })
+  @ApiQuery({ name: 'facilityId', required: true })
+  @ApiQuery({ name: 'startTime', required: true })
+  @ApiQuery({ name: 'endTime', required: true })
+  @ApiQuery({ name: 'interval', required: false, enum: ['10s', '1s'] })
+  @ApiQuery({ name: 'energyType', required: false, description: '에너지 유형 필터 (elec, air)' })
+  async getFacilityTrendData(
+    @Query('facilityId') facilityId: string,
+    @Query('startTime') startTime: string,
+    @Query('endTime') endTime: string,
+    @Query('interval') interval?: string,
+    @Query('energyType') energyType?: string,
+  ) {
+    return this.analysisService.getFacilityTrendData(
+      facilityId, startTime, endTime,
+      (interval || '10s') as '10s' | '1s',
+      energyType,
+    );
   }
 }
