@@ -456,6 +456,9 @@ export default function ANL010AdvAirComparison() {
           chartData={chartData}
           unit="m³/min"
           className="flex-shrink-0"
+          onNavigateToCycleSingle={(facilityId, facilityLabel, cycle) => {
+            navigate('/analysis/cycle-single', { state: { facilityId, facilityLabel, cycle } });
+          }}
           onNavigateToCycleAnalysis={(facilityId, facilityLabel, cycle) => {
             navigate('/analysis/cycle', { state: { facilityId, facilityLabel, cycle } });
           }}

@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import PageHeader from '../../components/layout/PageHeader';
 import ChartCard from '../../components/ui/ChartCard';
@@ -55,6 +56,18 @@ function findLabel(nodes: { id: string; label: string; children?: any[] }[], id:
   return undefined;
 }
 
+/** 트리에서 ID의 부모 경로(조상 ID 목록) 반환 */
+function findAncestorIds(nodes: { id: string; children?: any[] }[], targetId: string): string[] | null {
+  for (const node of nodes) {
+    if (node.id === targetId) return [];
+    if (node.children) {
+      const path = findAncestorIds(node.children, targetId);
+      if (path !== null) return [node.id, ...path];
+    }
+  }
+  return null;
+}
+
 const STATUS_COLORS = {
   normal: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400',
   delayed: 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400',
@@ -68,12 +81,21 @@ const STEP_COLORS = [
 ];
 
 export default function ANL011CycleSingleAnalysis() {
+  const location = useLocation();
+  const navState = location.state as { facilityId?: string; facilityLabel?: string; cycle?: CycleRangeItem } | null;
+  const appliedNav = useRef(false);
+
   /* ── 설비 트리 상태 ── */
-  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const [checked, setChecked] = useState<Set<string>>(() =>
+    navState?.facilityId ? new Set([navState.facilityId]) : new Set(),
+  );
   const [expanded, setExpanded] = useState<Set<string>>(new Set(GROUP_IDS));
 
   /* ── 날짜 + 시간 범위 ── */
-  const [date, setDate] = useState(TODAY);
+  const [date, setDate] = useState(() => {
+    if (navState?.cycle?.startTime) return toLocalDate(new Date(navState.cycle.startTime));
+    return TODAY;
+  });
   const [startHour, setStartHour] = useState(0);
   const [endHour, setEndHour] = useState(23);
 
@@ -106,6 +128,25 @@ export default function ANL011CycleSingleAnalysis() {
     return map;
   }, [elecCounts, airCounts]);
 
+  /* ── navState 설비 → 트리 부모 확장 + 스크롤 ── */
+  useEffect(() => {
+    if (!navState?.facilityId || !tree?.length) return;
+    // 부모 그룹 찾아서 expanded에 추가
+    const ancestors = findAncestorIds(tree, navState.facilityId);
+    if (ancestors && ancestors.length > 0) {
+      setExpanded(prev => {
+        const next = new Set(prev);
+        ancestors.forEach(id => next.add(id));
+        return next;
+      });
+    }
+    // DOM 렌더 후 스크롤
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`tree-node-${navState.facilityId}`);
+      el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  }, [tree, navState?.facilityId]);
+
   /* ── 단일 선택 모드 ── */
   const handleCheckedChange = useCallback((next: Set<string>) => {
     const leafIds = Array.from(next).filter(id => !GROUP_IDS.includes(id));
@@ -129,6 +170,18 @@ export default function ANL011CycleSingleAnalysis() {
     queryFn: () => getCyclesInRange(selectedFacility, rangeStart, rangeEnd),
     enabled: !!selectedFacility,
   });
+
+  /* ── navigation state에서 싸이클 자동 선택 ── */
+  useEffect(() => {
+    if (appliedNav.current || !navState?.cycle || !cycles?.length) return;
+    // ID 매칭 우선, 실패 시 startTime으로 폴백
+    const match = cycles.find(c => c.id === navState.cycle!.id)
+      ?? cycles.find(c => c.startTime === navState.cycle!.startTime);
+    if (match) {
+      setSelectedCycleId(match.id);
+      appliedNav.current = true;
+    }
+  }, [cycles, navState]);
 
   /* ── 선택된 싸이클 객체 ── */
   const selectedCycle = useMemo(

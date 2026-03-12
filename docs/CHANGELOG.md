@@ -4,6 +4,30 @@ All notable changes to the i-FEMS project are documented in this file.
 
 ---
 
+## [2026-03-12] - 싸이클 분석 연동 개선 & MON006 차트 제거
+
+### Changed
+- **ANL011 싸이클 분석 — 날짜 추출 수정** (`ANL011CycleSingleAnalysis.tsx`)
+  - `navState.cycle.startTime.slice(0, 10)` → `toLocalDate(new Date(...))` 로 로컬 타임존 기준 정확한 날짜 추출
+
+- **ANL011 설비 트리 자동 확장 + 스크롤** (`ANL011CycleSingleAnalysis.tsx`)
+  - `findAncestorIds()` 헬퍼: 트리에서 선택 설비의 조상 그룹 ID 추적
+  - `useEffect`: 트리 로드 후 부모 그룹 확장 + `scrollIntoView({ block: 'center' })` 자동 스크롤
+
+- **CycleTimelinePanel — 싸이클 분석 이동 버튼** (`CycleTimelinePanel.tsx`)
+  - `onNavigateToCycleSingle` 콜백 prop 추가
+  - "싸이클 분석으로" (filled) + "싸이클 비교분석으로" (outline) 2단 버튼
+
+- **ANL009/ANL010 — 싸이클 분석 네비게이션** 연결
+  - CycleTimelinePanel 클릭 → ANL011로 facilityId + cycle 데이터 전달
+
+### Removed
+- **MON006 누기율 Top 10 차트** 제거 (`MON006AirLeak.tsx`)
+  - 가로 막대 차트 블럭 삭제, 테이블이 전체 너비 사용
+  - 미사용 `SvgBarChart`, `COLORS` import 정리
+
+---
+
 ## [2026-03-11] - ANL007/008 기간별 비교 & TrendChart 줌 안정화 & 시간 표시 개선
 
 ### Added

@@ -1,12 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import SvgBarChart from '../../components/charts/SvgBarChart';
 import PageHeader from '../../components/layout/PageHeader';
 import FilterBar from '../../components/ui/FilterBar';
 import SortableTable, { Column } from '../../components/ui/SortableTable';
 import { StatusBadge } from '../../components/ui/TrafficLight';
 import { getAirLeakRanking } from '../../services/monitoring';
 import type { AirLeakData } from '../../services/mock/facilities';
-import { COLORS } from '../../lib/constants';
 import { cn } from '../../lib/utils';
 import { useLineFilter } from '../../hooks/useCommonFilters';
 
@@ -54,11 +52,6 @@ export default function MON006AirLeak() {
   });
 
   const sorted = [...data].sort((a, b) => b.excessUsage - a.excessUsage);
-  const top10Chart = sorted.slice(0, 10).map((d) => ({
-    name: d.code,
-    leakRate: d.leakRate,
-    status: d.status,
-  }));
 
   const columns: Column<AirLeakData>[] = [
     { key: 'rank', label: 'No.', width: 36, align: 'center',
@@ -132,48 +125,21 @@ export default function MON006AirLeak() {
         className="mb-0"
       />
 
-      <div className="flex gap-3 flex-1 min-h-0">
-        {/* 누기 순위 테이블 */}
-        <div className="flex-1 bg-white dark:bg-[#16213E] rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-800 dark:text-white">에어 누기 순위</span>
-            <span className="text-xs text-gray-400">기준: 누기율 20% 이하</span>
-          </div>
-          <SortableTable<AirLeakData>
-            columns={columns}
-            data={sorted}
-            keyField="facilityId"
-            compact
-            stickyHeader
-            rowClassName={(row) =>
-              row.leakRate > 30 ? 'row-danger' : row.leakRate > LEAK_LIMIT ? 'row-warning' : ''
-            }
-          />
+      <div className="flex-1 min-h-0 bg-white dark:bg-[#16213E] rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
+          <span className="text-sm font-semibold text-gray-800 dark:text-white">에어 누기 순위</span>
+          <span className="text-xs text-gray-400">기준: 누기율 20% 이하</span>
         </div>
-
-        {/* 누기율 가로 막대 차트 */}
-        <div className="w-80 bg-white dark:bg-[#16213E] rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col">
-          <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
-            <span className="text-sm font-semibold text-gray-800 dark:text-white">누기율 TOP 10 (%)</span>
-          </div>
-          <div className="flex-1 p-2">
-            <SvgBarChart
-              data={top10Chart}
-              categoryKey="name"
-              orientation="horizontal"
-              bars={[{
-                dataKey: 'leakRate',
-                color: (item) => item.status === 'DANGER' ? COLORS.danger : item.status === 'WARNING' ? COLORS.energy.power : COLORS.energy.air,
-              }]}
-              domain={[0, 60]}
-              valueUnit="%"
-              referenceLines={[{ value: LEAK_LIMIT, color: COLORS.energy.power, label: '기준', dashed: true }]}
-              showBarLabels
-              formatBarLabel={(v) => `${v.toFixed(1)}%`}
-              formatTooltip={(item) => `${item.name}: ${Number(item.leakRate).toFixed(1)}%`}
-            />
-          </div>
-        </div>
+        <SortableTable<AirLeakData>
+          columns={columns}
+          data={sorted}
+          keyField="facilityId"
+          compact
+          stickyHeader
+          rowClassName={(row) =>
+            row.leakRate > 30 ? 'row-danger' : row.leakRate > LEAK_LIMIT ? 'row-warning' : ''
+          }
+        />
       </div>
     </div>
   );

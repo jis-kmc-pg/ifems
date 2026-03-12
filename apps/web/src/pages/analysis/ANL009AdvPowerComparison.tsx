@@ -462,6 +462,9 @@ export default function ANL009AdvPowerComparison() {
           chartData={chartData}
           unit="kW"
           className="flex-shrink-0"
+          onNavigateToCycleSingle={(facilityId, facilityLabel, cycle) => {
+            navigate('/analysis/cycle-single', { state: { facilityId, facilityLabel, cycle } });
+          }}
           onNavigateToCycleAnalysis={(facilityId, facilityLabel, cycle) => {
             navigate('/analysis/cycle', { state: { facilityId, facilityLabel, cycle } });
           }}

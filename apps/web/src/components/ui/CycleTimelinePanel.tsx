@@ -23,6 +23,8 @@ interface CycleTimelinePanelProps {
   /** 단위 (kW, m³/min 등) */
   unit?: string;
   className?: string;
+  /** 싸이클 분석으로 이동 콜백 */
+  onNavigateToCycleSingle?: (facilityId: string, facilityLabel: string, cycle: CycleRangeItem) => void;
   /** 싸이클 비교분석으로 이동 콜백 */
   onNavigateToCycleAnalysis?: (facilityId: string, facilityLabel: string, cycle: CycleRangeItem) => void;
 }
@@ -97,7 +99,7 @@ function getRawStats(
   return { avg: Math.round(sum / count * 100) / 100, peak: Math.round(peak * 100) / 100, count };
 }
 
-export default function CycleTimelinePanel({ seriesCycles, zoomedRange, chartData, unit, className, onNavigateToCycleAnalysis }: CycleTimelinePanelProps) {
+export default function CycleTimelinePanel({ seriesCycles, zoomedRange, chartData, unit, className, onNavigateToCycleSingle, onNavigateToCycleAnalysis }: CycleTimelinePanelProps) {
   const viewStart = zoomedRange?.startSec ?? 0;
   const viewEnd = zoomedRange?.endSec ?? 3600;
   const viewSpan = viewEnd - viewStart;
@@ -289,6 +291,18 @@ export default function CycleTimelinePanel({ seriesCycles, zoomedRange, chartDat
             )}
           </div>
 
+          {/* 싸이클 분석 이동 버튼 */}
+          {onNavigateToCycleSingle && (
+            <button
+              onClick={() => {
+                onNavigateToCycleSingle(popup.facilityId, popup.facilityLabel, popup.cycle);
+                setPopup(null);
+              }}
+              className="mt-2 w-full py-1.5 text-xs rounded bg-[#E94560] text-white hover:opacity-90 transition-opacity"
+            >
+              싸이클 분석으로
+            </button>
+          )}
           {/* 싸이클 비교분석 이동 버튼 */}
           {onNavigateToCycleAnalysis && (
             <button
@@ -296,7 +310,7 @@ export default function CycleTimelinePanel({ seriesCycles, zoomedRange, chartDat
                 onNavigateToCycleAnalysis(popup.facilityId, popup.facilityLabel, popup.cycle);
                 setPopup(null);
               }}
-              className="mt-2 w-full py-1.5 text-xs rounded bg-[#E94560] text-white hover:opacity-90 transition-opacity"
+              className={`${onNavigateToCycleSingle ? 'mt-1' : 'mt-2'} w-full py-1.5 text-xs rounded border border-[#E94560] text-[#E94560] hover:bg-[#E94560]/10 transition-colors`}
             >
               싸이클 비교분석으로
             </button>
