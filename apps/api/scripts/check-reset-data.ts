@@ -27,20 +27,20 @@ async function main() {
 
   let prevValue: number | null = null;
   for (const d of recentData) {
-    const diff = prevValue !== null ? d.numericValue - prevValue : 0;
+    const diff = prevValue !== null ? d.value - prevValue : 0;
     const decreasePercent =
-      prevValue !== null && d.numericValue < prevValue
-        ? ((prevValue - d.numericValue) / prevValue) * 100
+      prevValue !== null && d.value < prevValue
+        ? ((prevValue - d.value) / prevValue) * 100
         : 0;
 
     const indicator =
       decreasePercent >= 10 ? '🔴 RESET!' : diff < 0 ? '⚠️ decrease' : '';
 
     console.log(
-      `${d.timestamp.toISOString()} | ${d.numericValue.toFixed(0).padStart(5)} | diff: ${diff.toFixed(0).padStart(6)} | ${indicator}`,
+      `${d.timestamp.toISOString()} | ${d.value.toFixed(0).padStart(5)} | diff: ${diff.toFixed(0).padStart(6)} | ${indicator}`,
     );
 
-    prevValue = d.numericValue;
+    prevValue = d.value;
   }
 
   // SQL 쿼리 직접 실행 (Reset Detector와 동일한 로직)
@@ -57,12 +57,12 @@ async function main() {
     WITH value_changes AS (
       SELECT
         timestamp,
-        "numericValue" as current_value,
-        LAG("numericValue") OVER (ORDER BY timestamp) as previous_value
+        value as current_value,
+        LAG(value) OVER (ORDER BY timestamp) as previous_value
       FROM tag_data_raw
       WHERE "tagId" = ${tag.id}
         AND timestamp >= NOW() - INTERVAL '2 minutes'
-        AND "numericValue" IS NOT NULL
+        AND value IS NOT NULL
       ORDER BY timestamp
     )
     SELECT

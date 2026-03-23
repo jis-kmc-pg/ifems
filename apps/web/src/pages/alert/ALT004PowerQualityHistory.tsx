@@ -1,48 +1,32 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { BarChart2 } from 'lucide-react';
 import PageHeader from '../../components/layout/PageHeader';
 import FilterBar from '../../components/ui/FilterBar';
 import Modal from '../../components/ui/Modal';
 import TrendChart from '../../components/charts/TrendChart';
-import { getAlertHistory, saveAlertAction, getCycleWaveformForAlert } from '../../services/alerts';
-import { AlertHistoryItem } from '../../services/mock/alerts';
+import { getCycleWaveformForAlert } from '../../services/alerts';
+import Spinner from '../../components/ui/Spinner';
 import { COLORS, SCREEN_INITIAL_INTERVAL, SCREEN_MAX_DEPTH } from '../../lib/constants';
 import { powerQualityHistorySeries } from '../../lib/chart-series';
-import { LINE_OPTIONS_KR as LINE_OPTIONS } from '../../lib/filter-options';
 import { getIntervalForZoomRatio, formatInterval } from '../../lib/chart-utils';
 import type { Interval } from '../../types/chart';
-const START = new Date(); START.setDate(START.getDate() - 7);
-const TODAY = new Date().toISOString().slice(0, 10);
-const START_STR = START.toISOString().slice(0, 10);
-
-function statusBadge(status: string) {
-  const map: Record<string, string> = {
-    ACTIVE: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400',
-    ACKNOWLEDGED: 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400',
-    RESOLVED: 'bg-green-100 text-[#27AE60] dark:bg-green-900/30 dark:text-[#27AE60]',
-  };
-  const label: Record<string, string> = { ACTIVE: '발생', ACKNOWLEDGED: '인지', RESOLVED: '해소' };
-  return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${map[status] ?? ''}`}>{label[status] ?? status}</span>;
-}
+import StatusBadge from '../../components/ui/StatusBadge';
+import { useAlertHistory } from '../../hooks/useAlertHistory';
+import type { AlertHistoryItem } from '../../services/mock/alerts';
 
 export default function ALT004PowerQualityHistory() {
-  const [lineFilter, setLineFilter] = useState('');
-  const [startDate, setStartDate] = useState(START_STR);
-  const [endDate, setEndDate] = useState(TODAY);
-  const [selected, setSelected] = useState<AlertHistoryItem | null>(null);
-  const [action, setAction] = useState('');
-  const [graphOpen, setGraphOpen] = useState(false);
+  const {
+    selected, action, setAction,
+    graphOpen, openGraph, closeGraph,
+    rows, refetch, handleSelect, isLoading,
+    saveMutation, baseFilters,
+  } = useAlertHistory({ category: 'power_quality', queryKeyPrefix: 'alt-pq-history' });
 
   // Dynamic Resolution for modal chart
   const initialInterval = (SCREEN_INITIAL_INTERVAL['ALT-004'] || '15m') as Interval;
   const maxDepth = SCREEN_MAX_DEPTH['ALT-004'] || 1;
   const [currentInterval, setCurrentInterval] = useState<Interval>(initialInterval);
-
-  const { data, refetch } = useQuery({
-    queryKey: ['alt-pq-history', lineFilter],
-    queryFn: () => getAlertHistory('power_quality', lineFilter || undefined),
-  });
 
   const { data: waveform } = useQuery({
     queryKey: ['alt-waveform', selected?.id, currentInterval],
@@ -57,20 +41,6 @@ export default function ALT004PowerQualityHistory() {
     }
   }, [currentInterval, initialInterval, maxDepth]);
 
-  const saveMutation = useMutation({
-    mutationFn: () => saveAlertAction(selected?.id ?? '', action),
-    onSuccess: () => alert('조치사항이 저장되었습니다.'),
-  });
-
-  const rows = (data ?? []).filter((r: AlertHistoryItem) =>
-    (!lineFilter || r.line === lineFilter)
-  );
-
-  const handleSelect = (row: AlertHistoryItem) => {
-    setSelected(row);
-    setAction(row.action ?? '');
-  };
-
   // 차트 series 설정 (팩토리 사용)
   const series = useMemo(() => powerQualityHistorySeries(), []);
 
@@ -79,11 +49,7 @@ export default function ALT004PowerQualityHistory() {
       <PageHeader title="전력 품질 이력" description="불평형률/역률 알림 발생 이력 및 조치사항 관리" />
 
       <FilterBar
-        filters={[
-          { type: 'date', key: 'start', label: '시작일', value: startDate, onChange: setStartDate },
-          { type: 'date', key: 'end', label: '종료일', value: endDate, onChange: setEndDate },
-          { type: 'select', key: 'line', label: '라인', value: lineFilter, onChange: setLineFilter, options: LINE_OPTIONS },
-        ]}
+        filters={baseFilters}
         onSearch={() => refetch()}
         className="mb-0"
       />
@@ -94,7 +60,12 @@ export default function ALT004PowerQualityHistory() {
           <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 flex-shrink-0 flex items-center justify-between">
             <span className="text-sm font-semibold text-gray-800 dark:text-white">알림 이력 ({rows.length}건)</span>
           </div>
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto relative">
+            {isLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-[#16213E]/60 backdrop-blur-[1px] z-10">
+                <Spinner size="md" message="알림 이력 조회 중..." />
+              </div>
+            )}
             <table className="w-full text-xs">
               <thead className="bg-gray-50 dark:bg-[#16213E] sticky top-0">
                 <tr>
@@ -132,7 +103,7 @@ export default function ALT004PowerQualityHistory() {
                     <td className="px-3 py-2.5 text-center font-bold" style={{ color: row.ratio > 150 ? COLORS.danger : row.ratio > 110 ? COLORS.energy.power : COLORS.normal }}>
                       {row.ratio.toFixed(0)}%
                     </td>
-                    <td className="px-3 py-2.5 text-center">{statusBadge(row.status)}</td>
+                    <td className="px-3 py-2.5 text-center"><StatusBadge status={row.status} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -156,7 +127,7 @@ export default function ALT004PowerQualityHistory() {
                   ['현재값', selected.current],
                   ['초과비율', `${selected.ratio.toFixed(1)}%`],
                   ['발생시각', new Date(selected.timestamp).toLocaleString('ko-KR')],
-                  ['상태', statusBadge(selected.status)],
+                  ['상태', <StatusBadge status={selected.status} />],
                 ].map(([label, value]) => (
                   <div key={String(label)} className="flex items-center gap-2 text-sm">
                     <span className="w-20 text-gray-500 flex-shrink-0">{label}</span>
@@ -167,7 +138,7 @@ export default function ALT004PowerQualityHistory() {
 
               {/* 그래프 보기 */}
               <button
-                onClick={() => setGraphOpen(true)}
+                onClick={openGraph}
                 className="flex items-center gap-2 px-4 py-2 rounded border border-[#27AE60] text-[#27AE60] hover:bg-[#27AE60]/10 text-sm transition-colors w-fit"
               >
                 <BarChart2 size={14} />
@@ -204,8 +175,8 @@ export default function ALT004PowerQualityHistory() {
       <Modal
         isOpen={graphOpen}
         onClose={() => {
-          setGraphOpen(false);
-          setCurrentInterval(initialInterval); // Reset interval on close
+          closeGraph();
+          setCurrentInterval(initialInterval);
         }}
         title={`${selected?.facilityCode} — 전력 품질 추이 (${formatInterval(currentInterval)})`}
         size="lg"

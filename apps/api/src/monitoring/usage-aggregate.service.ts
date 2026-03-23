@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { todayStart, daysAgo, nextDay } from '../common/utils/date-time.utils';
+import { getBucketSize } from '../common/utils/query-helpers';
 
 /**
  * UsageAggregateService
@@ -43,7 +44,7 @@ export class UsageAggregateService {
 
     try {
       // interval에 따라 추가 집계 필요
-      const bucketSize = this.getBucketSize(interval);
+      const bucketSize = getBucketSize(interval);
 
       // 조건부 WHERE 절 구성
       const whereClauses = [
@@ -165,19 +166,7 @@ export class UsageAggregateService {
     };
   }
 
-  /**
-   * interval을 PostgreSQL time_bucket 크기로 변환
-   */
-  private getBucketSize(interval: '1min' | '5min' | '1hour' | '1day'): string {
-    const bucketSizes = {
-      '1min': "INTERVAL '1 minute'",
-      '5min': "INTERVAL '5 minutes'",
-      '1hour': "INTERVAL '1 hour'",
-      '1day': "INTERVAL '1 day'",
-    };
-
-    return bucketSizes[interval];
-  }
+  // getBucketSize() → common/utils/query-helpers.ts 로 통합됨
 
   /**
    * 오늘/어제 비교 계산

@@ -6,6 +6,7 @@ import FilterBar, { type FilterItem } from '../../components/ui/FilterBar';
 import SortableTable, { type Column } from '../../components/ui/SortableTable';
 import Modal, { ConfirmModal } from '../../components/ui/Modal';
 import { StatusBadge } from '../../components/ui/TrafficLight';
+import { useModalState } from '../../hooks/useModalState';
 import {
   getFacilityMasterList,
   saveFacilityMaster,
@@ -49,12 +50,11 @@ export default function SET007FacilityMaster() {
   const [typeFilter, setTypeFilter] = useState('');
   const [searchText, setSearchText] = useState('');
 
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const modal = useModalState(['edit', 'delete'] as const);
   const [selectedFacility, setSelectedFacility] = useState<Facility | null>(null);
   const [formData, setFormData] = useState<Partial<Facility>>({});
 
-  const { data: facilities = [] } = useQuery({
+  const { data: facilities = [], isLoading } = useQuery({
     queryKey: ['facility-master'],
     queryFn: getFacilityMasterList,
   });
@@ -63,7 +63,7 @@ export default function SET007FacilityMaster() {
     mutationFn: (data: Facility) => saveFacilityMaster(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['facility-master'] });
-      setEditModalOpen(false);
+      modal.close('edit');
       alert('설비가 저장되었습니다.');
     },
   });
@@ -72,7 +72,7 @@ export default function SET007FacilityMaster() {
     mutationFn: (data: Omit<Facility, 'id'>) => createFacilityMaster(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['facility-master'] });
-      setEditModalOpen(false);
+      modal.close('edit');
       alert('설비가 추가되었습니다.');
     },
   });
@@ -81,7 +81,7 @@ export default function SET007FacilityMaster() {
     mutationFn: (id: string) => deleteFacilityMaster(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['facility-master'] });
-      setDeleteConfirmOpen(false);
+      modal.close('delete');
       setSelectedFacility(null);
       alert('설비가 삭제되었습니다.');
     },
@@ -204,18 +204,18 @@ export default function SET007FacilityMaster() {
       isProcessing: true,
     });
     setSelectedFacility(null);
-    setEditModalOpen(true);
+    modal.open('edit');
   };
 
   const handleEdit = (facility: Facility) => {
     setFormData(facility);
     setSelectedFacility(facility);
-    setEditModalOpen(true);
+    modal.open('edit');
   };
 
   const handleDelete = (facility: Facility) => {
     setSelectedFacility(facility);
-    setDeleteConfirmOpen(true);
+    modal.open('delete');
   };
 
   const handleSave = () => {
@@ -299,11 +299,11 @@ export default function SET007FacilityMaster() {
       />
 
       <div className="flex-1 bg-white dark:bg-[#16213E] rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm overflow-hidden">
-        <SortableTable columns={columns} data={filtered} keyField="id" pageSize={15} stickyHeader />
+        <SortableTable columns={columns} data={filtered} keyField="id" pageSize={15} stickyHeader loading={isLoading} />
       </div>
 
       {/* 추가/수정 모달 */}
-      <Modal isOpen={editModalOpen} onClose={() => setEditModalOpen(false)} title={selectedFacility ? '설비 수정' : '설비 추가'} size="md">
+      <Modal isOpen={modal.isOpen.edit} onClose={() => modal.close('edit')} title={selectedFacility ? '설비 수정' : '설비 추가'} size="md">
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -402,7 +402,7 @@ export default function SET007FacilityMaster() {
           </div>
 
           <div className="flex gap-2 justify-end pt-4 border-t border-gray-100 dark:border-gray-700">
-            <button onClick={() => setEditModalOpen(false)} className="px-4 py-2 text-sm rounded border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300">
+            <button onClick={() => modal.close('edit')} className="px-4 py-2 text-sm rounded border border-gray-200 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-white/10 text-gray-600 dark:text-gray-300">
               취소
             </button>
             <button onClick={handleSave} className="px-4 py-2 text-sm rounded bg-[#E94560] hover:bg-[#C73B52] text-white hover:opacity-90">
@@ -414,8 +414,8 @@ export default function SET007FacilityMaster() {
 
       {/* 삭제 확인 모달 */}
       <ConfirmModal
-        isOpen={deleteConfirmOpen}
-        onClose={() => setDeleteConfirmOpen(false)}
+        isOpen={modal.isOpen.delete}
+        onClose={() => modal.close('delete')}
         onConfirm={() => selectedFacility && deleteMutation.mutate(selectedFacility.id)}
         title="설비 삭제"
         message={`${selectedFacility?.code} - ${selectedFacility?.name}을(를) 삭제하시겠습니까?`}

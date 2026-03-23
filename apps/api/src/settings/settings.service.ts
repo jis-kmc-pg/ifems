@@ -5,6 +5,7 @@ import { CreateFacilityTypeDto, UpdateFacilityTypeDto } from './dto/facility-typ
 import { BulkUploadResponseDto, BulkUploadResultItem } from './dto/tag-bulk.dto';
 import { TagReassignmentDto, TagReassignmentResponseDto } from './dto/tag-reassignment.dto';
 import { SaveNonProductionSchedulesDto, ProductionCalendarDto } from './dto/non-production.dto';
+import { toDateStr } from '../common/utils/date-time.utils';
 
 @Injectable()
 export class SettingsService {
@@ -111,7 +112,7 @@ export class SettingsService {
         process: f.process ?? 'OP00',
         modelCode: f.type,
         registeredAt: hasReference && f.referenceCycle
-          ? f.referenceCycle.uploadedAt.toISOString().split('T')[0]
+          ? toDateStr(f.referenceCycle.uploadedAt)
           : null,
         energy: energy ? Math.round(energy * 100) / 100 : null,
         cycleTime,
@@ -1659,7 +1660,7 @@ export class SettingsService {
       lineId: e.lineId,
       lineCode: e.line?.code ?? null,
       lineName: e.line?.name ?? null,
-      date: e.date.toISOString().slice(0, 10),
+      date: toDateStr(e.date),
       type: e.type,
       description: e.description,
     }));

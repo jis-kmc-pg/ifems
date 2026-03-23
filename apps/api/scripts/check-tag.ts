@@ -23,7 +23,7 @@ async function main() {
 
   console.log('\nRecent data:');
   recentData.forEach((d) => {
-    console.log(`  ${d.timestamp.toISOString()} - ${d.numericValue}`);
+    console.log(`  ${d.timestamp.toISOString()} - ${d.value}`);
   });
 }
 

@@ -1,49 +1,45 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { BarChart2 } from 'lucide-react';
 import PageHeader from '../../components/layout/PageHeader';
 import FilterBar from '../../components/ui/FilterBar';
 import Modal from '../../components/ui/Modal';
+import Spinner from '../../components/ui/Spinner';
 import TrendChart from '../../components/charts/TrendChart';
-import { getAlertHistory, saveAlertAction, getCycleWaveformForAlert } from '../../services/alerts';
-import { AlertHistoryItem } from '../../services/mock/alerts';
+import { getCycleWaveformForAlert } from '../../services/alerts';
 import { COLORS, SCREEN_INITIAL_INTERVAL, SCREEN_MAX_DEPTH } from '../../lib/constants';
 import { cycleWaveformComparisonSeries } from '../../lib/chart-series';
 import { getIntervalForZoomRatio, formatInterval } from '../../lib/chart-utils';
 import type { Interval } from '../../types/chart';
-
-import { LINE_OPTIONS_KR as LINE_OPTIONS, ALERT_STATUS_OPTIONS as STATUS_OPTIONS } from '../../lib/filter-options';
-const TODAY = new Date().toISOString().slice(0, 10);
-const START_STR = (() => { const d = new Date(); d.setDate(d.getDate() - 7); return d.toISOString().slice(0, 10); })();
-
-function statusBadge(status: string) {
-  const map: Record<string, string> = {
-    ACTIVE: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400',
-    ACKNOWLEDGED: 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400',
-    RESOLVED: 'bg-green-100 text-[#27AE60] dark:bg-green-900/30 dark:text-[#27AE60]',
-  };
-  const label: Record<string, string> = { ACTIVE: '발생', ACKNOWLEDGED: '인지', RESOLVED: '해소' };
-  return <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${map[status] ?? ''}`}>{label[status] ?? status}</span>;
-}
+import { ALERT_STATUS_OPTIONS as STATUS_OPTIONS } from '../../lib/filter-options';
+import StatusBadge from '../../components/ui/StatusBadge';
+import { useAlertHistory } from '../../hooks/useAlertHistory';
+import type { AlertHistoryItem } from '../../services/mock/alerts';
 
 export default function ALT006CycleAnomalyHistory() {
-  const [lineFilter, setLineFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [startDate, setStartDate] = useState(START_STR);
-  const [endDate, setEndDate] = useState(TODAY);
-  const [selected, setSelected] = useState<AlertHistoryItem | null>(null);
-  const [action, setAction] = useState('');
-  const [graphOpen, setGraphOpen] = useState(false);
+
+  const {
+    selected, action, setAction,
+    graphOpen, openGraph, closeGraph,
+    rows: baseRows, refetch, handleSelect, isLoading,
+    saveMutation, baseFilters,
+  } = useAlertHistory({ category: 'cycle_anomaly', queryKeyPrefix: 'alt-cycle-history' });
+
+  // ALT006 추가 필터: 상태
+  const rows = statusFilter
+    ? baseRows.filter((r) => r.status === statusFilter)
+    : baseRows;
+
+  const filters = [
+    ...baseFilters,
+    { type: 'select' as const, key: 'status', label: '상태', value: statusFilter, onChange: setStatusFilter, options: STATUS_OPTIONS },
+  ];
 
   // Dynamic Resolution for modal chart
   const initialInterval = (SCREEN_INITIAL_INTERVAL['ALT-006'] || '15m') as Interval;
   const maxDepth = SCREEN_MAX_DEPTH['ALT-006'] || 2;
   const [currentInterval, setCurrentInterval] = useState<Interval>(initialInterval);
-
-  const { data, refetch } = useQuery({
-    queryKey: ['alt-cycle-history', lineFilter],
-    queryFn: () => getAlertHistory('cycle_anomaly', lineFilter || undefined),
-  });
 
   const { data: waveform } = useQuery({
     queryKey: ['alt-cycle-waveform', selected?.id, currentInterval],
@@ -58,31 +54,15 @@ export default function ALT006CycleAnomalyHistory() {
     }
   }, [currentInterval, initialInterval, maxDepth]);
 
-  const saveMutation = useMutation({
-    mutationFn: () => saveAlertAction(selected?.id ?? '', action),
-    onSuccess: () => alert('조치사항이 저장되었습니다.'),
-  });
-
-  const rows = (data ?? []).filter((r: AlertHistoryItem) =>
-    (!lineFilter || r.line === lineFilter) && (!statusFilter || r.status === statusFilter)
-  );
-
-  const handleSelect = (row: AlertHistoryItem) => { setSelected(row); setAction(row.action ?? ''); };
-
   // 차트 series 설정 (팩토리 사용)
   const series = useMemo(() => cycleWaveformComparisonSeries(), []);
 
   return (
     <div className="flex flex-col gap-4 h-full">
-      <PageHeader title="싸이클 이상 이력" description="싸이클 에너지/파형 이상 알림 이력 및 조치사항 관리" />
+      <PageHeader title="싸이클 이상 이력" description="싸이클 시간/파형 이상 알림 이력 및 조치사항 관리" />
 
       <FilterBar
-        filters={[
-          { type: 'date', key: 'start', label: '시작일', value: startDate, onChange: setStartDate },
-          { type: 'date', key: 'end', label: '종료일', value: endDate, onChange: setEndDate },
-          { type: 'select', key: 'line', label: '라인', value: lineFilter, onChange: setLineFilter, options: LINE_OPTIONS },
-          { type: 'select', key: 'status', label: '상태', value: statusFilter, onChange: setStatusFilter, options: STATUS_OPTIONS },
-        ]}
+        filters={filters}
         onSearch={() => refetch()}
         className="mb-0"
       />
@@ -93,11 +73,16 @@ export default function ALT006CycleAnomalyHistory() {
           <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 flex-shrink-0">
             <span className="text-sm font-semibold text-gray-800 dark:text-white">알림 이력 ({rows.length}건)</span>
           </div>
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto relative">
+            {isLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-[#16213E]/60 backdrop-blur-[1px] z-10">
+                <Spinner size="md" message="알림 이력 조회 중..." />
+              </div>
+            )}
             <table className="w-full text-xs">
               <thead className="bg-gray-50 dark:bg-[#16213E] sticky top-0">
                 <tr>
-                  {['No', '발생시각', '라인', '설비코드', '기준 에너지', '이상 에너지', '비율', '상태'].map((h) => (
+                  {['No', '발생시각', '라인', '설비코드', '기준시간', '실제시간', '비율', '상태'].map((h) => (
                     <th key={h} className="px-3 py-2.5 text-left text-gray-600 dark:text-gray-300 font-semibold">{h}</th>
                   ))}
                 </tr>
@@ -118,13 +103,13 @@ export default function ALT006CycleAnomalyHistory() {
                     <td className="px-3 py-2.5 text-gray-700 dark:text-gray-300">{row.line}</td>
                     <td className="px-3 py-2.5 font-medium text-gray-800 dark:text-gray-200">{row.facilityCode}</td>
                     <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400">{row.baseline}</td>
-                    <td className="px-3 py-2.5 font-medium" style={{ color: row.ratio > 115 ? COLORS.danger : row.ratio > 108 ? COLORS.energy.power : COLORS.normal }}>
+                    <td className="px-3 py-2.5 font-medium" style={{ color: Math.abs(row.ratio - 100) > 15 ? COLORS.danger : Math.abs(row.ratio - 100) > 8 ? COLORS.energy.power : COLORS.normal }}>
                       {row.current}
                     </td>
-                    <td className="px-3 py-2.5 font-bold" style={{ color: row.ratio > 115 ? COLORS.danger : row.ratio > 108 ? COLORS.energy.power : COLORS.normal }}>
-                      {row.ratio.toFixed(1)}%
+                    <td className="px-3 py-2.5 font-bold" style={{ color: Math.abs(row.ratio - 100) > 15 ? COLORS.danger : Math.abs(row.ratio - 100) > 8 ? COLORS.energy.power : COLORS.normal }}>
+                      {row.ratio > 100 ? '+' : ''}{(row.ratio - 100).toFixed(1)}%
                     </td>
-                    <td className="px-3 py-2.5">{statusBadge(row.status)}</td>
+                    <td className="px-3 py-2.5"><StatusBadge status={row.status} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -142,10 +127,10 @@ export default function ALT006CycleAnomalyHistory() {
               <div className="space-y-2">
                 {[
                   ['라인', selected.line], ['설비명', selected.facilityName],
-                  ['기준 에너지', selected.baseline], ['이상 에너지', selected.current],
-                  ['초과비율', `${selected.ratio.toFixed(1)}%`],
+                  ['기준시간', selected.baseline], ['실제시간', selected.current],
+                  ['편차', `${selected.ratio > 100 ? '+' : ''}${(selected.ratio - 100).toFixed(1)}%`],
                   ['발생시각', new Date(selected.timestamp).toLocaleString('ko-KR')],
-                  ['상태', statusBadge(selected.status)],
+                  ['상태', <StatusBadge status={selected.status} />],
                 ].map(([label, value]) => (
                   <div key={String(label)} className="flex items-center gap-2 text-sm">
                     <span className="w-24 text-gray-500 flex-shrink-0">{label}</span>
@@ -154,7 +139,7 @@ export default function ALT006CycleAnomalyHistory() {
                 ))}
               </div>
               <button
-                onClick={() => setGraphOpen(true)}
+                onClick={openGraph}
                 className="flex items-center gap-2 px-4 py-2 rounded border border-[#E74C3C] text-[#E74C3C] hover:bg-purple-50 dark:hover:bg-purple-900/20 text-sm w-fit"
               >
                 <BarChart2 size={14} />
@@ -187,8 +172,8 @@ export default function ALT006CycleAnomalyHistory() {
       <Modal
         isOpen={graphOpen}
         onClose={() => {
-          setGraphOpen(false);
-          setCurrentInterval(initialInterval); // Reset interval on close
+          closeGraph();
+          setCurrentInterval(initialInterval);
         }}
         title={`${selected?.facilityCode} — 싸이클 파형 비교 (${formatInterval(currentInterval)})`}
         size="xl"

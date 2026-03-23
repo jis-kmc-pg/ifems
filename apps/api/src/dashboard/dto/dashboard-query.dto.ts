@@ -1,27 +1,29 @@
-import { IsOptional, IsString, IsIn, IsInt, Min } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsIn } from 'class-validator';
+import {
+  BaseLineFilterDto,
+  BaseEnergyTypeFilterDto,
+  BasePaginationDto,
+} from '../../common/dto/base-query.dto';
 
-export class DashboardQueryDto {
+export class DashboardQueryDto extends BaseLineFilterDto {}
+
+export class CycleRankingQueryDto extends BaseLineFilterDto {
   @IsOptional()
   @IsString()
-  line?: string;
+  startDate?: string; // YYYY-MM-DD (default: 7일 전)
+
+  @IsOptional()
+  @IsString()
+  endDate?: string; // YYYY-MM-DD (default: 오늘)
 }
 
-export class FacilityTrendQueryDto {
-  @IsOptional()
-  @IsString()
-  line?: string;
-
+export class FacilityTrendQueryDto extends BaseLineFilterDto {
   @IsOptional()
   @IsString()
   facilityId?: string;
 }
 
-export class UsageDistributionQueryDto {
-  @IsOptional()
-  @IsString()
-  line?: string;
-
+export class UsageDistributionQueryDto extends BaseLineFilterDto {
   @IsOptional()
   @IsString()
   date?: string; // YYYY-MM-DD format (하위 호환)
@@ -35,23 +37,19 @@ export class UsageDistributionQueryDto {
   end?: string; // ISO8601 종료 시각
 }
 
-export class ProcessRankingQueryDto {
+export class AirLeakRankingQueryDto extends BaseLineFilterDto {
   @IsOptional()
   @IsString()
-  line?: string;
+  startDate?: string; // YYYY-MM-DD (default: 7일 전)
 
   @IsOptional()
-  @IsIn(['elec', 'air'])
-  type?: string;
+  @IsString()
+  endDate?: string; // YYYY-MM-DD (default: 오늘)
 }
 
-export class EnergyChangeQueryDto {
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  topN?: number;
+export class ProcessRankingQueryDto extends BaseEnergyTypeFilterDto {}
 
+export class EnergyChangeQueryDto extends BasePaginationDto {
   @IsOptional()
   @IsIn(['elec', 'air'])
   type?: string;

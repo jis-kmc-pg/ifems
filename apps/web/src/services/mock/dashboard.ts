@@ -102,14 +102,14 @@ export const PROCESS_RANKING_DATA = [
 // DSH-005 싸이클당 순위
 // ──────────────────────────────────────────────
 export const CYCLE_RANKING = [
-  { rank: 1, code: 'HNK10-020', process: 'OP20', cycleEnergy: 8.41, cycleTime: 42, deviation: 18.2, status: 'DANGER' as const },
-  { rank: 2, code: 'HNK10-010', process: 'OP10', cycleEnergy: 6.83, cycleTime: 38, deviation: 12.4, status: 'WARNING' as const },
-  { rank: 3, code: 'HNK10-030', process: 'OP30', cycleEnergy: 5.94, cycleTime: 35, deviation: 8.1, status: 'NORMAL' as const },
-  { rank: 4, code: 'HNK10-040', process: 'OP40', cycleEnergy: 4.21, cycleTime: 44, deviation: 6.8, status: 'NORMAL' as const },
-  { rank: 5, code: 'HNK10-010-1', process: 'OP10', cycleEnergy: 3.87, cycleTime: 38, deviation: 5.4, status: 'NORMAL' as const },
-  { rank: 6, code: 'HNK10-050', process: 'OP50', cycleEnergy: 3.24, cycleTime: 41, deviation: 4.2, status: 'NORMAL' as const },
-  { rank: 7, code: 'HNK10-010-2', process: 'OP10', cycleEnergy: 2.98, cycleTime: 38, deviation: 3.1, status: 'NORMAL' as const },
-  { rank: 8, code: 'HNK10-060', process: 'OP60', cycleEnergy: 2.71, cycleTime: 46, deviation: 2.8, status: 'NORMAL' as const },
+  { rank: 1, code: 'HNK10-020', name: 'MCC', process: 'OP20', cycleEnergy: 8.41, cycleTime: 42, refEnergy: 7.0, refCycleTime: 40, deviation: 20.1, dailyTotal: 1685.1, cycleCount: 198, status: 'DANGER' as const },
+  { rank: 2, code: 'HNK10-010', name: 'HNK10-010', process: 'OP10', cycleEnergy: 6.83, cycleTime: 38, refEnergy: 5.8, refCycleTime: 36, deviation: 17.8, dailyTotal: 1021.5, cycleCount: 152, status: 'DANGER' as const },
+  { rank: 3, code: 'HNK10-030', name: 'HNK10-030', process: 'OP30', cycleEnergy: 5.94, cycleTime: 35, refEnergy: 5.5, refCycleTime: 34, deviation: 8.0, dailyTotal: 874.2, cycleCount: 144, status: 'NORMAL' as const },
+  { rank: 4, code: 'HNK10-040', name: 'HNK10-040', process: 'OP40', cycleEnergy: 4.21, cycleTime: 44, refEnergy: 4.5, refCycleTime: 42, deviation: -6.4, dailyTotal: 580.9, cycleCount: 136, status: 'NORMAL' as const },
+  { rank: 5, code: 'HNK10-010-1', name: 'HNK10-010-1', process: 'OP10', cycleEnergy: 3.87, cycleTime: 38, refEnergy: 3.7, refCycleTime: 36, deviation: 4.6, dailyTotal: 503.1, cycleCount: 128, status: 'NORMAL' as const },
+  { rank: 6, code: 'HNK10-050', name: 'HNK10-050', process: 'OP50', cycleEnergy: 3.24, cycleTime: 41, refEnergy: 3.1, refCycleTime: 40, deviation: 4.5, dailyTotal: 421.2, cycleCount: 130, status: 'NORMAL' as const },
+  { rank: 7, code: 'HNK10-010-2', name: 'HNK10-010-2', process: 'OP10', cycleEnergy: 2.98, cycleTime: 38, refEnergy: 3.0, refCycleTime: 36, deviation: -0.7, dailyTotal: 387.4, cycleCount: 126, status: 'NORMAL' as const },
+  { rank: 8, code: 'HNK10-060', name: 'HNK10-060', process: 'OP60', cycleEnergy: 2.71, cycleTime: 46, refEnergy: 2.5, refCycleTime: 44, deviation: 8.4, dailyTotal: 352.2, cycleCount: 118, status: 'NORMAL' as const },
 ];
 
 // ──────────────────────────────────────────────

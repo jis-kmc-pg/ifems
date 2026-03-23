@@ -100,8 +100,8 @@ export default function ALT003CycleAnomalyStats() {
   const { line, filter: lineFilter } = useLineFilter();
   const [period, setPeriod] = useState('8w');
 
-  const { data: kpi } = useQuery({ queryKey: ['alt-cycle-kpi'], queryFn: () => getAlertStatsKpi('cycle_anomaly') });
-  const { data: trend } = useQuery({ queryKey: ['alt-cycle-trend'], queryFn: () => getAlertTrend('cycle_anomaly') });
+  const { data: kpi, isLoading: kpiLoading } = useQuery({ queryKey: ['alt-cycle-kpi'], queryFn: () => getAlertStatsKpi('cycle_anomaly') });
+  const { data: trend, isLoading: trendLoading } = useQuery({ queryKey: ['alt-cycle-trend'], queryFn: () => getAlertTrend('cycle_anomaly') });
   const { data: anomalyTypes } = useQuery({ queryKey: ['alt-cycle-types'], queryFn: getCycleAnomalyTypes });
 
   return (
@@ -109,10 +109,10 @@ export default function ALT003CycleAnomalyStats() {
       <PageHeader title="싸이클 이상 통계" description="싸이클 에너지·파형 이상 알림 통계 (8주)" />
 
       <div className="grid grid-cols-4 gap-3 flex-shrink-0">
-        <KpiCard label="누적 알림" value={kpi?.total ?? 0} unit="건" />
-        <KpiCard label="주간 알림" value={kpi?.weekly ?? 0} unit="건" change={kpi?.weeklyChange} inverseChange changeLabel="vs 전주" />
-        <KpiCard label="조치 완료" value={kpi?.resolved ?? 0} unit="건" />
-        <KpiCard label="조치율" value={kpi?.resolvedRate ?? 0} unit="%" />
+        <KpiCard label="누적 알림" value={kpi?.total ?? 0} unit="건" isLoading={kpiLoading} />
+        <KpiCard label="주간 알림" value={kpi?.weekly ?? 0} unit="건" change={kpi?.weeklyChange} inverseChange changeLabel="vs 전주" isLoading={kpiLoading} />
+        <KpiCard label="정상 싸이클" value={kpi?.resolved ?? 0} unit="건" isLoading={kpiLoading} />
+        <KpiCard label="정상률" value={kpi?.resolvedRate ?? 0} unit="%" isLoading={kpiLoading} />
       </div>
 
       <FilterBar
@@ -134,6 +134,8 @@ export default function ALT003CycleAnomalyStats() {
           exportData={trend}
           exportFilename="싸이클이상_주간트렌드"
           minHeight={0}
+          isLoading={trendLoading}
+          loadingText="알림 추이 조회 중..."
         >
           <SvgBarChart
             data={trend ?? []}

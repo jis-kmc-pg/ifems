@@ -33,7 +33,7 @@ async function main() {
     testData.push({
       tagId: tag.id,
       timestamp: new Date(now.getTime() - i * 1000),
-      numericValue: baseValue + (30 - i) * 10, // 점진적 증가
+      value: baseValue + (30 - i) * 10, // 점진적 증가
       quality: 'GOOD',
     });
   }
@@ -42,7 +42,7 @@ async function main() {
   testData.push({
     tagId: tag.id,
     timestamp: new Date(now.getTime() - 15000),
-    numericValue: resetValue, // 10,300 → 100 (96% 감소 → 리셋 감지됨!)
+    value: resetValue, // 10,300 → 100 (96% 감소 → 리셋 감지됨!)
     quality: 'GOOD',
   });
 
@@ -51,7 +51,7 @@ async function main() {
     testData.push({
       tagId: tag.id,
       timestamp: new Date(now.getTime() - i * 1000),
-      numericValue: resetValue + (14 - i) * 5, // 리셋 후 다시 증가
+      value: resetValue + (14 - i) * 5, // 리셋 후 다시 증가
       quality: 'GOOD',
     });
   }

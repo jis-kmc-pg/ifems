@@ -45,7 +45,7 @@ async function main() {
       data: {
         tagId: tag.id,
         timestamp,
-        numericValue: currentValue,
+        value: currentValue,
         quality: 'GOOD',
       },
     });

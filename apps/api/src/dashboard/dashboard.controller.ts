@@ -3,9 +3,11 @@ import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { DashboardService } from './dashboard.service';
 import {
   DashboardQueryDto,
+  CycleRankingQueryDto,
   FacilityTrendQueryDto,
   UsageDistributionQueryDto,
   ProcessRankingQueryDto,
+  AirLeakRankingQueryDto,
   EnergyChangeQueryDto,
 } from './dto/dashboard-query.dto';
 
@@ -51,12 +53,14 @@ export class DashboardController {
     return this.dashboardService.getProcessRanking(query.line, query.type);
   }
 
-  // DSH-005: 싸이클당 순위
+  // DSH-005: 싸이클당 순위 (기간별, 기본 7일)
   @Get('cycle-ranking')
   @ApiOperation({ summary: '싸이클당 순위 조회' })
   @ApiQuery({ name: 'line', required: false, example: 'block' })
-  async getCycleRanking(@Query() query: DashboardQueryDto) {
-    return this.dashboardService.getCycleRanking(query.line);
+  @ApiQuery({ name: 'startDate', required: false, example: '2026-03-13', description: 'YYYY-MM-DD (기본: 7일 전)' })
+  @ApiQuery({ name: 'endDate', required: false, example: '2026-03-20', description: 'YYYY-MM-DD (기본: 오늘)' })
+  async getCycleRanking(@Query() query: CycleRankingQueryDto) {
+    return this.dashboardService.getCycleRanking(query.line, query.startDate, query.endDate);
   }
 
   // DSH-006: 전력 품질 순위
@@ -67,12 +71,14 @@ export class DashboardController {
     return this.dashboardService.getPowerQualityRanking(query.line);
   }
 
-  // DSH-007: 에어 누기 순위
+  // DSH-007: 에어 누기 순위 (기간별, 기본 7일)
   @Get('air-leak-ranking')
   @ApiOperation({ summary: '에어 누기 순위 조회' })
   @ApiQuery({ name: 'line', required: false, example: 'block' })
-  async getAirLeakRanking(@Query() query: DashboardQueryDto) {
-    return this.dashboardService.getAirLeakRanking(query.line);
+  @ApiQuery({ name: 'startDate', required: false, example: '2026-03-13', description: 'YYYY-MM-DD (기본: 7일 전)' })
+  @ApiQuery({ name: 'endDate', required: false, example: '2026-03-20', description: 'YYYY-MM-DD (기본: 오늘)' })
+  async getAirLeakRanking(@Query() query: AirLeakRankingQueryDto) {
+    return this.dashboardService.getAirLeakRanking(query.line, query.startDate, query.endDate);
   }
 
   // DSH-008: 에너지 변화 TOP N

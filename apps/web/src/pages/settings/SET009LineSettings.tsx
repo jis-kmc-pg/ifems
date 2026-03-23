@@ -5,6 +5,8 @@ import PageHeader from '../../components/layout/PageHeader';
 import FilterBar, { type FilterItem } from '../../components/ui/FilterBar';
 import SortableTable, { type Column } from '../../components/ui/SortableTable';
 import Modal, { ConfirmModal } from '../../components/ui/Modal';
+import { useModalState } from '../../hooks/useModalState';
+import { qk } from '../../lib/query-keys';
 import {
   getFactoryList,
   getLineList,
@@ -18,26 +20,25 @@ import {
 export default function SET009LineSettings() {
   const queryClient = useQueryClient();
   const [factoryFilter, setFactoryFilter] = useState('');
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const modal = useModalState(['edit', 'delete'] as const);
   const [selectedLine, setSelectedLine] = useState<Line | null>(null);
   const [formData, setFormData] = useState<Partial<Line>>({});
 
   const { data: factories = [] } = useQuery({
-    queryKey: ['factory-list'],
+    queryKey: qk.settings.factoryList(),
     queryFn: getFactoryList,
   });
 
   const { data: lines = [], isLoading } = useQuery({
-    queryKey: ['line-list', factoryFilter],
+    queryKey: qk.settings.lineList(factoryFilter),
     queryFn: () => getLineList(factoryFilter || undefined),
   });
 
   const createMutation = useMutation({
     mutationFn: (data: any) => createLine(data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['line-list'] });
-      setEditModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: qk.settings.lineList._def });
+      modal.close('edit');
       alert('라인이 추가되었습니다.');
     },
   });
@@ -45,8 +46,8 @@ export default function SET009LineSettings() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<Line> }) => updateLine(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['line-list'] });
-      setEditModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: qk.settings.lineList._def });
+      modal.close('edit');
       alert('라인 정보가 수정되었습니다.');
     },
   });
@@ -54,8 +55,8 @@ export default function SET009LineSettings() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteLine(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['line-list'] });
-      setDeleteConfirmOpen(false);
+      queryClient.invalidateQueries({ queryKey: qk.settings.lineList._def });
+      modal.close('delete');
       setSelectedLine(null);
       alert('라인이 삭제되었습니다.');
     },
@@ -128,18 +129,18 @@ export default function SET009LineSettings() {
   const handleAdd = () => {
     setSelectedLine(null);
     setFormData({ isActive: true, order: 0 });
-    setEditModalOpen(true);
+    modal.open('edit');
   };
 
   const handleEdit = (line: Line) => {
     setSelectedLine(line);
     setFormData(line);
-    setEditModalOpen(true);
+    modal.open('edit');
   };
 
   const handleDelete = (line: Line) => {
     setSelectedLine(line);
-    setDeleteConfirmOpen(true);
+    modal.open('delete');
   };
 
   const handleSave = () => {
@@ -190,8 +191,8 @@ export default function SET009LineSettings() {
 
       {/* 추가/수정 모달 */}
       <Modal
-        isOpen={editModalOpen}
-        onClose={() => setEditModalOpen(false)}
+        isOpen={modal.isOpen.edit}
+        onClose={() => modal.close('edit')}
         title={selectedLine ? '라인 수정' : '라인 추가'}
       >
         <div className="space-y-4">
@@ -272,7 +273,7 @@ export default function SET009LineSettings() {
               저장
             </button>
             <button
-              onClick={() => setEditModalOpen(false)}
+              onClick={() => modal.close('edit')}
               className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
             >
               취소
@@ -283,8 +284,8 @@ export default function SET009LineSettings() {
 
       {/* 삭제 확인 모달 */}
       <ConfirmModal
-        isOpen={deleteConfirmOpen}
-        onClose={() => setDeleteConfirmOpen(false)}
+        isOpen={modal.isOpen.delete}
+        onClose={() => modal.close('delete')}
         onConfirm={() => selectedLine && deleteMutation.mutate(selectedLine.id)}
         title="라인 삭제"
         message={`"${selectedLine?.name}" 라인을 삭제하시겠습니까?\n연결된 설비 데이터도 함께 삭제될 수 있습니다.`}

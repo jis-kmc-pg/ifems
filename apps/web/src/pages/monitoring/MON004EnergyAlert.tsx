@@ -33,7 +33,7 @@ export default function MON004EnergyAlert() {
   const { line, filter: lineFilter } = useLineFilter();
   const [compare, setCompare] = useState('prev_month');
 
-  const { data = [], refetch } = useQuery({
+  const { data = [], refetch, isLoading } = useQuery({
     queryKey: ['mon-energy-alert', line],
     queryFn: () => getEnergyAlertStatus(line === 'all' ? 'block' : line as 'block'),
   });
@@ -91,6 +91,7 @@ export default function MON004EnergyAlert() {
           pageSize={20}
           compact
           stickyHeader
+          loading={isLoading}
           rowClassName={(row) =>
             row.elecStatus === 'DANGER' || row.airStatus === 'DANGER' ? 'row-danger'
               : row.elecStatus === 'WARNING' || row.airStatus === 'WARNING' ? 'row-warning'

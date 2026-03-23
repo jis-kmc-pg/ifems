@@ -14,7 +14,7 @@ export default function MON003EnergyRanking() {
   const { line, filter: lineFilter } = useLineFilter();
   const { energyType, filter: energyFilter } = useEnergyFilter();
 
-  const { data = [], refetch } = useQuery({
+  const { data = [], refetch, isLoading } = useQuery({
     queryKey: ['mon-energy-ranking', line, energyType],
     queryFn: () => getEnergyRanking(line as 'block', energyType),
   });
@@ -80,6 +80,7 @@ export default function MON003EnergyRanking() {
             pageSize={15}
             compact
             stickyHeader
+            loading={isLoading}
             rowClassName={(row) => row.status === 'DANGER' ? 'row-danger' : row.status === 'WARNING' ? 'row-warning' : ''}
           />
         </div>

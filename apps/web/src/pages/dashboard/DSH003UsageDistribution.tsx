@@ -162,7 +162,7 @@ export default function DSH003UsageDistribution() {
 
   // ── 데이터 조회 (useSWR — 검색 범위 기반) ──
   const lineParam = line === 'all' ? undefined : (line as 'block');
-  const { data, mutate } = useSWR(
+  const { data, mutate, isLoading } = useSWR(
     `dsh003:${line}:${startTime}:${endTime}`,
     () => getUsageDistribution(lineParam, startTime, endTime),
     { revalidateOnFocus: false, dedupingInterval: 60000 },
@@ -178,10 +178,10 @@ export default function DSH003UsageDistribution() {
 
       {/* KPI */}
       <div className="grid grid-cols-4 gap-3 flex-shrink-0">
-        <KpiCard label="전체 전력" value={Math.round(totalPowerProcess + totalPowerNon)} unit="kWh" />
-        <KpiCard label="가공 전력" value={Math.round(totalPowerProcess)} unit="kWh" />
-        <KpiCard label="비가공 전력" value={Math.round(totalPowerNon)} unit="kWh" />
-        <KpiCard label="가공 에어" value={Math.round(totalAirProcess / 1000)} unit="KL" />
+        <KpiCard label="전체 전력" value={Math.round(totalPowerProcess + totalPowerNon)} unit="kWh" isLoading={isLoading} />
+        <KpiCard label="가공 전력" value={Math.round(totalPowerProcess)} unit="kWh" isLoading={isLoading} />
+        <KpiCard label="비가공 전력" value={Math.round(totalPowerNon)} unit="kWh" isLoading={isLoading} />
+        <KpiCard label="가공 에어" value={Math.round(totalAirProcess / 1000)} unit="KL" isLoading={isLoading} />
       </div>
 
       {/* 필터바 (useSearchFilter — 에너지추이와 동일) */}
@@ -202,6 +202,8 @@ export default function DSH003UsageDistribution() {
           exportData={data?.powerProcessing}
           exportFilename="사용량분포_전력가공"
           minHeight={200}
+          isLoading={isLoading}
+          loadingText="전력 분포 조회 중..."
         >
           <DonutChart data={data?.powerProcessing ?? []} colors={PIE_COLORS_PROCESS} unit="kWh" />
         </ChartCard>
@@ -214,6 +216,8 @@ export default function DSH003UsageDistribution() {
           exportData={data?.powerNonProcessing}
           exportFilename="사용량분포_전력비가공"
           minHeight={200}
+          isLoading={isLoading}
+          loadingText="전력 분포 조회 중..."
         >
           <DonutChart data={data?.powerNonProcessing ?? []} colors={PIE_COLORS_NON} unit="kWh" />
         </ChartCard>
@@ -226,6 +230,8 @@ export default function DSH003UsageDistribution() {
           exportData={data?.airProcessing}
           exportFilename="사용량분포_에어가공"
           minHeight={200}
+          isLoading={isLoading}
+          loadingText="에어 분포 조회 중..."
         >
           <DonutChart data={data?.airProcessing ?? []} colors={PIE_COLORS_PROCESS} unit="L" />
         </ChartCard>
@@ -238,6 +244,8 @@ export default function DSH003UsageDistribution() {
           exportData={data?.airNonProcessing}
           exportFilename="사용량분포_에어비가공"
           minHeight={200}
+          isLoading={isLoading}
+          loadingText="에어 분포 조회 중..."
         >
           <DonutChart data={data?.airNonProcessing ?? []} colors={PIE_COLORS_NON} unit="L" />
         </ChartCard>

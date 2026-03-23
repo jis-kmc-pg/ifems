@@ -46,7 +46,7 @@ const monoRed = (v: number) => cn(`${mono} font-semibold`, v > 0 ? 'text-red-600
 export default function MON006AirLeak() {
   const { line, filter: lineFilter } = useLineFilter({ defaultValue: 'block' });
 
-  const { data = [], refetch } = useQuery({
+  const { data = [], refetch, isLoading } = useQuery({
     queryKey: ['mon-air-leak', line],
     queryFn: () => getAirLeakRanking(line as 'block'),
   });
@@ -136,6 +136,7 @@ export default function MON006AirLeak() {
           keyField="facilityId"
           compact
           stickyHeader
+          loading={isLoading}
           rowClassName={(row) =>
             row.leakRate > 30 ? 'row-danger' : row.leakRate > LEAK_LIMIT ? 'row-warning' : ''
           }

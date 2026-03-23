@@ -33,6 +33,7 @@ type LeakRow = {
 import { useLineFilter } from '../../hooks/useCommonFilters';
 
 const TODAY = new Date().toISOString().slice(0, 10);
+const WEEK_AGO = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
 function leakColor(rate: number) {
   if (rate >= 30) return COLORS.danger;
@@ -54,11 +55,12 @@ const monoRed = (v: number) => cn(`${mono} font-semibold`, v > 0 ? 'text-red-600
 
 export default function DSH007AirLeakRanking() {
   const { line, filter: lineFilter } = useLineFilter();
-  const [date, setDate] = useState(TODAY);
+  const [startDate, setStartDate] = useState(WEEK_AGO);
+  const [endDate, setEndDate] = useState(TODAY);
 
-  const { data, refetch } = useQuery({
-    queryKey: ['dsh-air-leak-ranking', line],
-    queryFn: () => getAirLeakRanking(line === 'all' ? undefined : (line as 'block')),
+  const { data, refetch, isLoading } = useQuery({
+    queryKey: ['dsh-air-leak-ranking', line, startDate, endDate],
+    queryFn: () => getAirLeakRanking(line === 'all' ? undefined : (line as 'block'), startDate, endDate),
   });
 
   const rows: LeakRow[] = [...(data ?? [])].sort((a, b) => b.excessUsage - a.excessUsage);
@@ -124,20 +126,21 @@ export default function DSH007AirLeakRanking() {
 
   return (
     <div className="flex flex-col gap-4 h-full">
-      <PageHeader title="에어 누기 순위" description="설비별 에어 누기율 순위 (비생산시간 기준)" />
+      <PageHeader title="에어 누기 순위" description="설비별 에어 누기율 순위 (기간별 집계)" />
 
       {/* KPI */}
       <div className="grid grid-cols-4 gap-3 flex-shrink-0">
-        <KpiCard label="평균 누기율" value={avgLeak.toFixed(1)} unit="%" inverseChange />
-        <KpiCard label="위험(>=30%)" value={danger} unit="개" inverseChange />
-        <KpiCard label="주의(>=20%)" value={warning} unit="개" inverseChange />
-        <KpiCard label="총 추정 누기비용" value={totalExcessCost.toLocaleString()} unit="원" inverseChange />
+        <KpiCard label="평균 누기율" value={avgLeak.toFixed(1)} unit="%" inverseChange isLoading={isLoading} />
+        <KpiCard label="위험(>=30%)" value={danger} unit="개" inverseChange isLoading={isLoading} />
+        <KpiCard label="주의(>=20%)" value={warning} unit="개" inverseChange isLoading={isLoading} />
+        <KpiCard label="총 추정 누기비용" value={totalExcessCost.toLocaleString()} unit="원" inverseChange isLoading={isLoading} />
       </div>
 
       <FilterBar
         filters={[
           lineFilter,
-          { type: 'date', key: 'date', label: '날짜', value: date, onChange: setDate },
+          { type: 'date', key: 'startDate', label: '시작일', value: startDate, onChange: setStartDate },
+          { type: 'date', key: 'endDate', label: '종료일', value: endDate, onChange: setEndDate },
         ]}
         onSearch={() => refetch()}
         className="mb-0"
@@ -173,6 +176,8 @@ export default function DSH007AirLeakRanking() {
           style={{ height: 200 }}
           chartId="dsh007-leak"
           minHeight={0}
+          isLoading={isLoading}
+          loadingText="누기 순위 계산 중..."
         >
           <SvgBarChart
             data={rows}
@@ -195,7 +200,7 @@ export default function DSH007AirLeakRanking() {
 
       {/* 테이블 */}
       <div className="flex-1 min-h-0 overflow-auto">
-        <SortableTable data={rows} columns={columns} stickyHeader compact />
+        <SortableTable data={rows} columns={columns} stickyHeader compact loading={isLoading} />
       </div>
     </div>
   );

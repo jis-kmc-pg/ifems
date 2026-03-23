@@ -11,7 +11,7 @@ import {
 import { overviewTrendSeries } from '../../lib/chart-series';
 
 export default function MON001Overview() {
-  const { data: kpi } = useQuery({
+  const { data: kpi, isLoading: kpiLoading } = useQuery({
     queryKey: ['mon-overview-kpi'],
     queryFn: getOverviewKpi,
     refetchInterval: 60_000,
@@ -60,10 +60,10 @@ export default function MON001Overview() {
 
       {/* KPI 카드 4개 */}
       <div className="grid grid-cols-4 gap-3 flex-shrink-0">
-        <KpiCard label="전체 전력 사용량" value={kpi?.totalPower.value ?? 0} unit="kWh" change={kpi?.totalPower.change} inverseChange changeLabel="vs 전일" />
-        <KpiCard label="전체 에어 사용량" value={kpi?.totalAir.value ?? 0} unit="ML" change={kpi?.totalAir.change} inverseChange changeLabel="vs 전일" />
-        <KpiCard label="전력 품질 알림" value={kpi?.powerQualityAlarms.value ?? 0} unit="건" change={kpi?.powerQualityAlarms.change} inverseChange changeLabel="vs 전일" />
-        <KpiCard label="에어 누기 알림" value={kpi?.airLeakAlarms.value ?? 0} unit="건" change={kpi?.airLeakAlarms.change} inverseChange changeLabel="vs 전일" />
+        <KpiCard label="전체 전력 사용량" value={kpi?.totalPower.value ?? 0} unit="kWh" change={kpi?.totalPower.change} inverseChange changeLabel="vs 전일" isLoading={kpiLoading} />
+        <KpiCard label="전체 에어 사용량" value={kpi?.totalAir.value ?? 0} unit="ML" change={kpi?.totalAir.change} inverseChange changeLabel="vs 전일" isLoading={kpiLoading} />
+        <KpiCard label="전력 품질 알림" value={kpi?.powerQualityAlarms.value ?? 0} unit="건" change={kpi?.powerQualityAlarms.change} inverseChange changeLabel="vs 전일" isLoading={kpiLoading} />
+        <KpiCard label="에어 누기 알림" value={kpi?.airLeakAlarms.value ?? 0} unit="건" change={kpi?.airLeakAlarms.change} inverseChange changeLabel="vs 전일" isLoading={kpiLoading} />
       </div>
 
       {/* 라인별 미니 카드 4개 */}

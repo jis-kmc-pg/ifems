@@ -6,6 +6,7 @@ import FilterBar, { type FilterItem } from '../../components/ui/FilterBar';
 import SortableTable, { type Column } from '../../components/ui/SortableTable';
 import Modal, { ConfirmModal } from '../../components/ui/Modal';
 import CascadeSelect from '../../components/ui/CascadeSelect';
+import { useModalState } from '../../hooks/useModalState';
 import {
   getTagList,
   createTag,
@@ -46,11 +47,7 @@ export default function SET012TagMaster() {
   const [energyTypeFilter, setEnergyTypeFilter] = useState('');
   const [searchText, setSearchText] = useState('');
 
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [bulkUploadModalOpen, setBulkUploadModalOpen] = useState(false);
-  const [reassignModalOpen, setReassignModalOpen] = useState(false);
-  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const modal = useModalState(['edit', 'delete', 'bulkUpload', 'reassign', 'history'] as const);
 
   const [selectedTag, setSelectedTag] = useState<Tag | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -81,7 +78,7 @@ export default function SET012TagMaster() {
     mutationFn: (data: any) => createTag(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tag-list'] });
-      setEditModalOpen(false);
+      modal.close('edit');
       alert('태그가 추가되었습니다.');
     },
   });
@@ -90,7 +87,7 @@ export default function SET012TagMaster() {
     mutationFn: ({ id, data }: { id: string; data: Partial<Tag> }) => updateTag(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tag-list'] });
-      setEditModalOpen(false);
+      modal.close('edit');
       alert('태그 정보가 수정되었습니다.');
     },
   });
@@ -99,7 +96,7 @@ export default function SET012TagMaster() {
     mutationFn: (id: string) => deleteTag(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tag-list'] });
-      setDeleteConfirmOpen(false);
+      modal.close('delete');
       setSelectedTag(null);
       alert('태그가 삭제되었습니다.');
     },
@@ -113,7 +110,7 @@ export default function SET012TagMaster() {
     },
     onError: (error: any) => {
       alert(`업로드 실패: ${error.response?.data?.message || error.message}`);
-      setBulkUploadModalOpen(false);
+      modal.close('bulkUpload');
     },
   });
 
@@ -122,7 +119,7 @@ export default function SET012TagMaster() {
       reassignTags(data),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['tag-list'] });
-      setReassignModalOpen(false);
+      modal.close('reassign');
       setSelectedTags([]);
       alert(`재할당 완료: 성공 ${result.success}개, 실패 ${result.failed}개`);
     },
@@ -303,18 +300,18 @@ export default function SET012TagMaster() {
   const handleAdd = () => {
     setSelectedTag(null);
     setFormData({ isActive: true, order: 0, measureType: 'INSTANTANEOUS', category: 'ENERGY' } as any);
-    setEditModalOpen(true);
+    modal.open('edit');
   };
 
   const handleEdit = (tag: Tag) => {
     setSelectedTag(tag);
     setFormData(tag);
-    setEditModalOpen(true);
+    modal.open('edit');
   };
 
   const handleDelete = (tag: Tag) => {
     setSelectedTag(tag);
-    setDeleteConfirmOpen(true);
+    modal.open('delete');
   };
 
   const handleSave = () => {
@@ -339,7 +336,7 @@ export default function SET012TagMaster() {
     if (!file) return;
 
     setBulkUploadResult(null);
-    setBulkUploadModalOpen(true);
+    modal.open('bulkUpload');
     bulkUploadMutation.mutate(file);
 
     // Reset file input
@@ -377,7 +374,7 @@ export default function SET012TagMaster() {
     }
 
     setBulkUploadResult(null);
-    setBulkUploadModalOpen(true);
+    modal.open('bulkUpload');
     bulkUploadMutation.mutate(file);
   };
 
@@ -387,7 +384,7 @@ export default function SET012TagMaster() {
       return;
     }
     setReassignData({ targetFacilityId: '', reason: '' });
-    setReassignModalOpen(true);
+    modal.open('reassign');
   };
 
   const handleReassignConfirm = () => {
@@ -407,7 +404,7 @@ export default function SET012TagMaster() {
     try {
       const history = await getTagReassignmentHistory(tag.id);
       setReassignmentHistory(history);
-      setHistoryModalOpen(true);
+      modal.open('history');
     } catch (error: any) {
       alert(`이력 조회 실패: ${error.response?.data?.message || error.message}`);
     }
@@ -512,8 +509,8 @@ export default function SET012TagMaster() {
 
       {/* 추가/수정 모달 */}
       <Modal
-        isOpen={editModalOpen}
-        onClose={() => setEditModalOpen(false)}
+        isOpen={modal.isOpen.edit}
+        onClose={() => modal.close('edit')}
         title={selectedTag ? '태그 수정' : '태그 추가'}
       >
         <div className="space-y-4 max-h-[70vh] overflow-y-auto">
@@ -656,7 +653,7 @@ export default function SET012TagMaster() {
               저장
             </button>
             <button
-              onClick={() => setEditModalOpen(false)}
+              onClick={() => modal.close('edit')}
               className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
             >
               취소
@@ -667,8 +664,8 @@ export default function SET012TagMaster() {
 
       {/* 삭제 확인 모달 */}
       <ConfirmModal
-        isOpen={deleteConfirmOpen}
-        onClose={() => setDeleteConfirmOpen(false)}
+        isOpen={modal.isOpen.delete}
+        onClose={() => modal.close('delete')}
         onConfirm={() => selectedTag && deleteMutation.mutate(selectedTag.id)}
         title="태그 삭제"
         message={`"${selectedTag?.displayName} (${selectedTag?.tagName})" 태그를 삭제하시겠습니까?`}
@@ -678,8 +675,8 @@ export default function SET012TagMaster() {
 
       {/* 일괄 업로드 결과 모달 */}
       <Modal
-        isOpen={bulkUploadModalOpen}
-        onClose={() => setBulkUploadModalOpen(false)}
+        isOpen={modal.isOpen.bulkUpload}
+        onClose={() => modal.close('bulkUpload')}
         title="일괄 업로드 결과"
       >
         <div className="space-y-4">
@@ -741,7 +738,7 @@ export default function SET012TagMaster() {
               </div>
 
               <button
-                onClick={() => setBulkUploadModalOpen(false)}
+                onClick={() => modal.close('bulkUpload')}
                 className="w-full px-4 py-2 bg-[#E94560] hover:bg-[#C73B52] text-white rounded-lg transition-colors"
               >
                 확인
@@ -753,8 +750,8 @@ export default function SET012TagMaster() {
 
       {/* 재할당 모달 */}
       <Modal
-        isOpen={reassignModalOpen}
-        onClose={() => setReassignModalOpen(false)}
+        isOpen={modal.isOpen.reassign}
+        onClose={() => modal.close('reassign')}
         title="태그 재할당"
       >
         <div className="space-y-4">
@@ -790,7 +787,7 @@ export default function SET012TagMaster() {
               {reassignMutation.isPending ? '처리 중...' : '재할당'}
             </button>
             <button
-              onClick={() => setReassignModalOpen(false)}
+              onClick={() => modal.close('reassign')}
               className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
             >
               취소
@@ -801,8 +798,8 @@ export default function SET012TagMaster() {
 
       {/* 재할당 이력 모달 */}
       <Modal
-        isOpen={historyModalOpen}
-        onClose={() => setHistoryModalOpen(false)}
+        isOpen={modal.isOpen.history}
+        onClose={() => modal.close('history')}
         title={`재할당 이력 - ${selectedTag?.displayName}`}
       >
         <div className="space-y-4">
@@ -836,7 +833,7 @@ export default function SET012TagMaster() {
           )}
 
           <button
-            onClick={() => setHistoryModalOpen(false)}
+            onClick={() => modal.close('history')}
             className="w-full px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
           >
             닫기

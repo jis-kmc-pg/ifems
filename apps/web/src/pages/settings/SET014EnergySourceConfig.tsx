@@ -5,6 +5,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import FilterBar, { type FilterItem } from '../../components/ui/FilterBar';
 import SortableTable, { type Column } from '../../components/ui/SortableTable';
 import Modal from '../../components/ui/Modal';
+import { useModalState } from '../../hooks/useModalState';
 import {
   getEnergyConfigList,
   getEnergyConfig,
@@ -43,8 +44,7 @@ export default function SET014EnergySourceConfig() {
   const [reviewFilter, setReviewFilter] = useState('');
   const [searchText, setSearchText] = useState('');
 
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const modal = useModalState(['edit', 'history'] as const);
   const [selectedConfig, setSelectedConfig] = useState<EnergyConfigDetail | null>(null);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [formCalcMethod, setFormCalcMethod] = useState('DIFF');
@@ -76,7 +76,7 @@ export default function SET014EnergySourceConfig() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['energy-config-list'] });
       queryClient.invalidateQueries({ queryKey: ['energy-config-summary'] });
-      setEditModalOpen(false);
+      modal.close('edit');
       alert('에너지 소스 매핑이 수정되었습니다.');
     },
   });
@@ -275,7 +275,7 @@ export default function SET014EnergySourceConfig() {
       setSelectedTagIds(detail.tags.map((t) => t.id));
       setFormCalcMethod(detail.calcMethod);
       setFormDescription('');
-      setEditModalOpen(true);
+      modal.open('edit');
     } catch (error: any) {
       alert(`상세 조회 실패: ${error.message}`);
     }
@@ -311,7 +311,7 @@ export default function SET014EnergySourceConfig() {
       });
       setHistoryData(result?.data || []);
       setHistoryConfig(config);
-      setHistoryModalOpen(true);
+      modal.open('history');
     } catch (error: any) {
       alert(`이력 조회 실패: ${error.message}`);
     }
@@ -403,8 +403,8 @@ export default function SET014EnergySourceConfig() {
 
       {/* 수정 모달 - 태그 체크박스 방식 */}
       <Modal
-        isOpen={editModalOpen}
-        onClose={() => setEditModalOpen(false)}
+        isOpen={modal.isOpen.edit}
+        onClose={() => modal.close('edit')}
         title={`에너지 소스 매핑 수정 - ${selectedConfig?.facilityCode} (${ENERGY_TYPE_LABELS[selectedConfig?.energyType || ''] || ''})`}
       >
         {selectedConfig && (
@@ -515,7 +515,7 @@ export default function SET014EnergySourceConfig() {
                 {updateMutation.isPending ? '저장 중...' : '저장'}
               </button>
               <button
-                onClick={() => setEditModalOpen(false)}
+                onClick={() => modal.close('edit')}
                 className="flex-1 px-4 py-2 bg-gray-100 dark:bg-[#1A1A2E] hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600 rounded-lg transition-colors"
               >
                 취소
@@ -527,8 +527,8 @@ export default function SET014EnergySourceConfig() {
 
       {/* 변경 이력 모달 */}
       <Modal
-        isOpen={historyModalOpen}
-        onClose={() => setHistoryModalOpen(false)}
+        isOpen={modal.isOpen.history}
+        onClose={() => modal.close('history')}
         title={`변경 이력 - ${historyConfig?.facilityCode} (${ENERGY_TYPE_LABELS[historyConfig?.energyType || ''] || ''})`}
         size="lg"
       >
@@ -585,7 +585,7 @@ export default function SET014EnergySourceConfig() {
             </div>
           )}
           <button
-            onClick={() => setHistoryModalOpen(false)}
+            onClick={() => modal.close('history')}
             className="w-full px-4 py-2 bg-gray-100 dark:bg-[#1A1A2E] hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600 rounded-lg transition-colors"
           >
             닫기

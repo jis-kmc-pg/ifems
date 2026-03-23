@@ -30,14 +30,16 @@ export const getUsageDistribution = (line?: LineId, start?: string, end?: string
 export const getProcessRanking = (line?: LineId, type: EnergyType = 'power') =>
   fetchApi(PROCESS_RANKING_DATA, '/dashboard/process-ranking', { line, type: toApiType(type) });
 
-// DSH-005 싸이클당 순위
-export const getCycleRanking = (line?: LineId) => fetchApi(CYCLE_RANKING, '/dashboard/cycle-ranking', { line });
+// DSH-005 싸이클당 순위 (기간별, 기본 7일)
+export const getCycleRanking = (line?: LineId, startDate?: string, endDate?: string) =>
+  fetchApi(CYCLE_RANKING, '/dashboard/cycle-ranking', { line, startDate, endDate });
 
 // DSH-006 전력 품질 순위
 export const getPowerQualityRanking = (line?: LineId) => fetchApi(POWER_QUALITY_DATA, '/dashboard/power-quality-ranking', { line });
 
-// DSH-007 에어 누기 순위
-export const getAirLeakRanking = (line?: LineId) => fetchApi(AIR_LEAK_DATA, '/dashboard/air-leak-ranking', { line });
+// DSH-007 에어 누기 순위 (기간별, 기본 7일)
+export const getAirLeakRanking = (line?: LineId, startDate?: string, endDate?: string) =>
+  fetchApi(AIR_LEAK_DATA, '/dashboard/air-leak-ranking', { line, startDate, endDate });
 
 // DSH-008 에너지 변화 TOP N (복잡한 mock 로직 → 유지)
 export async function getEnergyChangeTopN(topN: number = 8, type: EnergyType = 'power') {

@@ -33,7 +33,7 @@ export default function DSH004ProcessRanking() {
   const { energyType: type, filter: energyFilter } = useEnergyFilter({ detailed: true });
   const [date, setDate] = useState(TODAY);
 
-  const { data, refetch } = useQuery({
+  const { data, refetch, isLoading } = useQuery({
     queryKey: ['dsh-process-ranking', line, type],
     queryFn: () => getProcessRanking(line === 'all' ? undefined : (line as 'block'), type),
   });
@@ -116,6 +116,8 @@ export default function DSH004ProcessRanking() {
         exportData={sorted}
         exportFilename="공정별순위"
         minHeight={0}
+        isLoading={isLoading}
+        loadingText="공정별 순위 조회 중..."
       >
         <SvgBarChart
           data={sorted}
@@ -147,6 +149,7 @@ export default function DSH004ProcessRanking() {
           columns={columns}
           stickyHeader
           compact
+          loading={isLoading}
         />
       </div>
     </div>

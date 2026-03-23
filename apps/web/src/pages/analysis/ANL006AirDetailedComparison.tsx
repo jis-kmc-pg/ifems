@@ -10,12 +10,12 @@ import type { TrendSeries } from '../../components/charts/TrendChart';
 import { FACILITY_COLORS } from '../../lib/chart-series';
 import { getIntervalForZoomRatio, formatInterval } from '../../lib/chart-utils';
 
-import { getFacilityTree, getFacilityTrendData, getFacilityTagCounts } from '../../services/analysis';
+import { getFacilityTrendData, getFacilityTagCounts } from '../../services/analysis';
 import type { Interval } from '../../types/chart';
+import { useFacilityTreeSelection, GROUP_IDS } from '../../hooks/useFacilityTreeSelection';
 
 const TODAY = new Date().toISOString().slice(0, 10);
 const MAX_FACILITIES = 6;
-const GROUP_IDS = ['plant', 'block', 'head', 'crank', 'assembly'];
 
 type TagInfo = { tagName: string; displayName: string; energyType: string; unit: string };
 type TrendResult = { tags: TagInfo[]; data: Record<string, any>[] };
@@ -28,14 +28,12 @@ function timeRangeToIso(range: { start: string; end: string } | null, date: stri
 
 export default function ANL006AirDetailedComparison() {
   // ── 트리 상태 ──
-  const [checked, setChecked] = useState<Set<string>>(new Set());
+  const { checked, setChecked, tree, facilityIds } = useFacilityTreeSelection();
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['plant', 'block']));
-  const { data: tree } = useQuery({ queryKey: ['anl-tree'], queryFn: getFacilityTree });
   const { data: tagCountMap } = useQuery({
     queryKey: ['anl006-tag-counts'],
     queryFn: () => getFacilityTagCounts('air'),
   });
-  const facilityIds = Array.from(checked).filter(id => !GROUP_IDS.includes(id));
 
   // ── 설비별 날짜 상태 ──
   const [facilityDates, setFacilityDates] = useState<Record<string, string>>({});

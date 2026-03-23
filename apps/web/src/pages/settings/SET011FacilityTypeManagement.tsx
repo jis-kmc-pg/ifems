@@ -9,6 +9,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import FilterBar, { type FilterItem } from '../../components/ui/FilterBar';
 import SortableTable, { type Column } from '../../components/ui/SortableTable';
 import Modal, { ConfirmModal } from '../../components/ui/Modal';
+import { useModalState } from '../../hooks/useModalState';
 import {
   getFacilityTypeList,
   createFacilityType,
@@ -32,8 +33,7 @@ export default function SET011FacilityTypeManagement() {
   const [activeFilter, setActiveFilter] = useState('');
   const [searchText, setSearchText] = useState('');
 
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const modal = useModalState(['edit', 'delete'] as const);
   const [selectedType, setSelectedType] = useState<FacilityType | null>(null);
   const [formData, setFormData] = useState<Partial<FacilityType>>({});
 
@@ -54,7 +54,7 @@ export default function SET011FacilityTypeManagement() {
     mutationFn: (data: any) => createFacilityType(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['facility-type-list'] });
-      setEditModalOpen(false);
+      modal.close('edit');
       alert('설비 유형이 추가되었습니다.');
     },
     onError: (error: any) => {
@@ -66,7 +66,7 @@ export default function SET011FacilityTypeManagement() {
     mutationFn: ({ id, data }: { id: string; data: Partial<FacilityType> }) => updateFacilityType(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['facility-type-list'] });
-      setEditModalOpen(false);
+      modal.close('edit');
       alert('설비 유형 정보가 수정되었습니다.');
     },
     onError: (error: any) => {
@@ -78,7 +78,7 @@ export default function SET011FacilityTypeManagement() {
     mutationFn: (id: string) => deleteFacilityType(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['facility-type-list'] });
-      setDeleteConfirmOpen(false);
+      modal.close('delete');
       setSelectedType(null);
       alert('설비 유형이 삭제되었습니다.');
     },
@@ -183,13 +183,13 @@ export default function SET011FacilityTypeManagement() {
   const handleAdd = () => {
     setSelectedType(null);
     setFormData({ isActive: true, order: facilityTypes.length });
-    setEditModalOpen(true);
+    modal.open('edit');
   };
 
   const handleEdit = (type: FacilityType) => {
     setSelectedType(type);
     setFormData(type);
-    setEditModalOpen(true);
+    modal.open('edit');
   };
 
   const handleDelete = (type: FacilityType) => {
@@ -198,7 +198,7 @@ export default function SET011FacilityTypeManagement() {
       return;
     }
     setSelectedType(type);
-    setDeleteConfirmOpen(true);
+    modal.open('delete');
   };
 
   const handleSave = () => {
@@ -267,8 +267,8 @@ export default function SET011FacilityTypeManagement() {
 
       {/* 추가/수정 모달 */}
       <Modal
-        isOpen={editModalOpen}
-        onClose={() => setEditModalOpen(false)}
+        isOpen={modal.isOpen.edit}
+        onClose={() => modal.close('edit')}
         title={selectedType ? '설비 유형 수정' : '설비 유형 추가'}
       >
         <div className="space-y-4">
@@ -406,7 +406,7 @@ export default function SET011FacilityTypeManagement() {
               {createMutation.isPending || updateMutation.isPending ? '처리 중...' : '저장'}
             </button>
             <button
-              onClick={() => setEditModalOpen(false)}
+              onClick={() => modal.close('edit')}
               className="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors"
             >
               취소
@@ -417,8 +417,8 @@ export default function SET011FacilityTypeManagement() {
 
       {/* 삭제 확인 모달 */}
       <ConfirmModal
-        isOpen={deleteConfirmOpen}
-        onClose={() => setDeleteConfirmOpen(false)}
+        isOpen={modal.isOpen.delete}
+        onClose={() => modal.close('delete')}
         onConfirm={() => selectedType && deleteMutation.mutate(selectedType.id)}
         title="설비 유형 삭제"
         message={`"${selectedType?.name} (${selectedType?.code})" 유형을 삭제하시겠습니까?`}

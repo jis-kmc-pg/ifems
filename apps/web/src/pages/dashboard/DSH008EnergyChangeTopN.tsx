@@ -71,11 +71,11 @@ export default function DSH008EnergyChangeTopN() {
   const [topN, setTopN] = useState('8');
 
   // 전력/에어 동시 조회
-  const { data: powerData, refetch: refetchPower } = useQuery({
+  const { data: powerData, refetch: refetchPower, isLoading: powerLoading } = useQuery({
     queryKey: ['dsh-energy-change-top', topN, 'power'],
     queryFn: () => getEnergyChangeTopN(Number(topN), 'power'),
   });
-  const { data: airData, refetch: refetchAir } = useQuery({
+  const { data: airData, refetch: refetchAir, isLoading: airLoading } = useQuery({
     queryKey: ['dsh-energy-change-top', topN, 'air'],
     queryFn: () => getEnergyChangeTopN(Number(topN), 'air'),
   });
@@ -100,6 +100,7 @@ export default function DSH008EnergyChangeTopN() {
   const ps = stats(powerRows);
   const as_ = stats(airRows);
 
+  const anyLoading = powerLoading || airLoading;
   const handleSearch = () => { refetchPower(); refetchAir(); };
 
   return (
@@ -116,10 +117,10 @@ export default function DSH008EnergyChangeTopN() {
 
       {/* KPI — 전력/에어 통합 */}
       <div className="grid grid-cols-4 gap-3 flex-shrink-0">
-        <KpiCard label="전력 증가" value={ps.inc} unit="개" inverseChange />
-        <KpiCard label="전력 감소" value={ps.dec} unit="개" />
-        <KpiCard label="에어 증가" value={as_.inc} unit="개" inverseChange />
-        <KpiCard label="에어 감소" value={as_.dec} unit="개" />
+        <KpiCard label="전력 증가" value={ps.inc} unit="개" inverseChange isLoading={powerLoading} />
+        <KpiCard label="전력 감소" value={ps.dec} unit="개" isLoading={powerLoading} />
+        <KpiCard label="에어 증가" value={as_.inc} unit="개" inverseChange isLoading={airLoading} />
+        <KpiCard label="에어 감소" value={as_.dec} unit="개" isLoading={airLoading} />
       </div>
 
       <FilterBar
@@ -140,6 +141,8 @@ export default function DSH008EnergyChangeTopN() {
           exportData={powerRows}
           exportFilename="에너지변화TopN_전력"
           minHeight={0}
+          isLoading={powerLoading}
+          loadingText="전력 변화율 계산 중..."
         >
           <SvgBarChart
             data={powerRows}
@@ -165,6 +168,8 @@ export default function DSH008EnergyChangeTopN() {
           exportData={airRows}
           exportFilename="에너지변화TopN_에어"
           minHeight={0}
+          isLoading={airLoading}
+          loadingText="에어 변화율 계산 중..."
         >
           <SvgBarChart
             data={airRows}
@@ -189,13 +194,13 @@ export default function DSH008EnergyChangeTopN() {
           <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
             <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">전력(kWh) 변화 상세</span>
           </div>
-          <SortableTable data={powerRows} columns={ChangeColumns(ps.max)} stickyHeader compact />
+          <SortableTable data={powerRows} columns={ChangeColumns(ps.max)} stickyHeader compact loading={powerLoading} />
         </div>
         <div className="overflow-auto bg-white dark:bg-[#16213E] rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm">
           <div className="px-3 py-2 border-b border-gray-100 dark:border-gray-700">
             <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">에어(L) 변화 상세</span>
           </div>
-          <SortableTable data={airRows} columns={ChangeColumns(as_.max)} stickyHeader compact />
+          <SortableTable data={airRows} columns={ChangeColumns(as_.max)} stickyHeader compact loading={airLoading} />
         </div>
       </div>
     </div>

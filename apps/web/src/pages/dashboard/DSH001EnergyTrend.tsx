@@ -64,12 +64,12 @@ export default function DSH001EnergyTrend() {
       ? fetchFactoryRangeData(kpiEntityId, startTime, endTime, searchUnit, metric)
       : fetchLineRangeData(kpiEntityId, startTime, endTime, searchUnit, metric);
 
-  const { data: kpiPowerResp } = useSWR(
+  const { data: kpiPowerResp, isLoading: kpiPowerLoading } = useSWR(
     kpiEnabled ? `kpi:power:${line === 'all' ? 'factory' : 'line'}:${kpiEntityId}:${startTime}:${endTime}:${searchUnit}` : null,
     kpiFetcher('power'),
     { revalidateOnFocus: false, dedupingInterval: 60000 },
   );
-  const { data: kpiAirResp } = useSWR(
+  const { data: kpiAirResp, isLoading: kpiAirLoading } = useSWR(
     kpiEnabled ? `kpi:air:${line === 'all' ? 'factory' : 'line'}:${kpiEntityId}:${startTime}:${endTime}:${searchUnit}` : null,
     kpiFetcher('air'),
     { revalidateOnFocus: false, dedupingInterval: 60000 },
@@ -96,8 +96,8 @@ export default function DSH001EnergyTrend() {
 
       {/* KPI */}
       <div className="grid grid-cols-3 gap-3 flex-shrink-0">
-        <KpiCard label="당일 누적 전력" value={totalPower} unit="kWh" />
-        <KpiCard label="당일 누적 에어" value={Math.round(totalAir / 1000)} unit="KL" />
+        <KpiCard label="당일 누적 전력" value={totalPower} unit="kWh" isLoading={kpiPowerLoading} />
+        <KpiCard label="당일 누적 에어" value={Math.round(totalAir / 1000)} unit="KL" isLoading={kpiAirLoading} />
         <KpiCard label="전력 피크월" value={2} unit="월" />
       </div>
 

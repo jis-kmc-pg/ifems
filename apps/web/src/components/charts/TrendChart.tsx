@@ -205,17 +205,6 @@ const TrendChart = memo(({
     const yMin = Math.max(0, min - padding);
     let yMax = max + padding;
 
-    // ✅ 비정상적으로 큰 값 방지: 최대값 상한선 설정
-    // 전력(kWh): 10,000 이하, 에어(L): 100,000 이하로 제한
-    if (yLabel === 'kWh' && yMax > 10000) {
-      yMax = 10000;
-    } else if (yLabel === 'L' && yMax > 100000) {
-      yMax = 100000;
-    } else if (yMax > 1000000) {
-      // 일반적인 상한선: 1,000,000
-      yMax = 1000000;
-    }
-
     return [yMin, yMax];
   }, [sampledData, series, yLabel]);
 

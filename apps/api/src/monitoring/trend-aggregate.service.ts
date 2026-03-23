@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { getBucketSize } from '../common/utils/query-helpers';
 
 /**
  * TrendAggregateService
@@ -41,7 +42,7 @@ export class TrendAggregateService {
     );
 
     try {
-      const bucketSize = this.getBucketSize(interval);
+      const bucketSize = getBucketSize(interval);
 
       // 조건부 WHERE 절 구성
       const whereClauses = [
@@ -184,17 +185,5 @@ export class TrendAggregateService {
     }));
   }
 
-  /**
-   * interval을 PostgreSQL time_bucket 크기로 변환
-   */
-  private getBucketSize(interval: '10sec' | '1min' | '5min' | '1hour'): string {
-    const bucketSizes = {
-      '10sec': "INTERVAL '10 seconds'",
-      '1min': "INTERVAL '1 minute'",
-      '5min': "INTERVAL '5 minutes'",
-      '1hour': "INTERVAL '1 hour'",
-    };
-
-    return bucketSizes[interval];
-  }
+  // getBucketSize() → common/utils/query-helpers.ts 로 통합됨
 }

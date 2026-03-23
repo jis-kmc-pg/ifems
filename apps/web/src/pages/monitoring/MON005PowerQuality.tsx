@@ -47,7 +47,7 @@ export default function MON005PowerQuality() {
   const [startDate, setStartDate] = useState(TODAY);
   const [endDate, setEndDate] = useState(TODAY);
 
-  const { data = [], refetch } = useQuery({
+  const { data = [], refetch, isLoading } = useQuery({
     queryKey: ['mon-power-quality', line, startDate, endDate],
     queryFn: () => getPowerQualityRanking(line as 'block', startDate, endDate),
   });
@@ -147,6 +147,7 @@ export default function MON005PowerQuality() {
             keyField="facilityId"
             compact
             stickyHeader
+            loading={isLoading}
             rowClassName={(row) =>
               row.unbalanceRate > row.unbalanceLimit ? 'row-danger'
                 : row.unbalanceRate > row.unbalanceLimit * 0.85 ? 'row-warning'
@@ -167,6 +168,7 @@ export default function MON005PowerQuality() {
             keyField="facilityId"
             compact
             stickyHeader
+            loading={isLoading}
             rowClassName={(row) =>
               row.powerFactor < row.powerFactorLimit ? 'row-danger'
                 : row.powerFactor < row.powerFactorLimit * 1.05 ? 'row-warning'

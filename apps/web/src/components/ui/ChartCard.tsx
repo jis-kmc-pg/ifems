@@ -2,6 +2,7 @@ import { CSSProperties, ReactNode } from 'react';
 import { Download, Image } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { exportToExcel, exportToImage } from '../../lib/utils';
+import Spinner from './Spinner';
 
 interface ChartCardProps {
   title: string;
@@ -14,10 +15,15 @@ interface ChartCardProps {
   exportFilename?: string;
   actions?: ReactNode;
   minHeight?: number;
+  /** 로딩 중일 때 차트 영역에 블러 + 스피너 오버레이 */
+  isLoading?: boolean;
+  /** 로딩 메시지 (예: "에너지 데이터 조회 중...") */
+  loadingText?: string;
 }
 
 export default function ChartCard({
   title, subtitle, children, className, style, chartId, exportData, exportFilename, actions, minHeight = 280,
+  isLoading, loadingText,
 }: ChartCardProps) {
   return (
     <div className={cn('bg-white dark:bg-[#16213E] rounded-lg border border-gray-100 dark:border-gray-700 shadow-sm flex flex-col', className)} style={style}>
@@ -48,8 +54,13 @@ export default function ChartCard({
           )}
         </div>
       </div>
-      <div className="flex-1 p-3 overflow-hidden" style={{ minHeight }} id={chartId}>
+      <div className="flex-1 p-3 overflow-hidden relative" style={{ minHeight }} id={chartId}>
         {children}
+        {isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-[#16213E]/60 backdrop-blur-[1px] z-10 transition-opacity duration-300">
+            <Spinner size="md" message={loadingText || '데이터 조회 중...'} />
+          </div>
+        )}
       </div>
     </div>
   );

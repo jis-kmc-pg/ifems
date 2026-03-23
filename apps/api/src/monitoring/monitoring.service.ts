@@ -1,47 +1,102 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { Prisma } from '@prisma/client';
 import { RangeQueryDto } from './dto/range-query.dto';
 import { RangeDataResponse, RangeDataPoint, AnomalyEvent } from './dto/range-response.dto';
 import { ResetDetectorService } from './reset-detector.service';
 import { IntervalEnum, INTERVAL_TO_BUCKET, INTERVAL_TO_ZOOM_LEVEL, isCaggBasedInterval } from './types/interval.enum';
-import { NotFoundException } from '@nestjs/common';
 import {
   InvalidTimeRangeException,
+  InvalidIntervalException,
+  InvalidDateFormatException,
   FacilityNotFoundException,
+  EntityNotFoundException,
   DatabaseQueryException,
 } from '../common/exceptions/custom-exceptions';
 import {
   todayStart, tomorrowStart, daysAgo, nextDay,
   KST_OFFSET, toUtcSql, roundTo, changeRate,
+  startOfDay, toDateStr, kstNow,
 } from '../common/utils/date-time.utils';
-
-/**
- * Cache Entry Interface
- */
-interface CacheEntry<T> {
-  data: T;
-  timestamp: number;
-  ttl: number;
-}
+import { CacheService } from '../common/services/cache.service';
 
 @Injectable()
-export class MonitoringService {
+export class MonitoringService implements OnModuleInit {
   private readonly logger = new Logger(MonitoringService.name);
-
-  /**
-   * In-memory cache for range data
-   * Key: `${facilityId}:${metric}:${interval}:${startTime}:${endTime}`
-   * TTL varies by interval: 15m=300s, 1m=180s, 10s=60s, 1s=30s
-   */
-  private readonly rangeCache = new Map<string, CacheEntry<RangeDataResponse>>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly resetDetectorService: ResetDetectorService,
-  ) {
-    // Cache cleanup every 5 minutes
-    setInterval(() => this.cleanupExpiredCache(), 5 * 60 * 1000);
+    private readonly cache: CacheService,
+  ) {}
+
+  /**
+   * DB warm-up: CA tables to PG shared_buffers (cold cache prevention)
+   */
+  async onModuleInit() {
+    this.warmUpCaTables().catch((err) =>
+      this.logger.warn('CA warm-up failed (non-critical):', err.message),
+    );
+  }
+
+  private async warmUpCaTables() {
+    const start = Date.now();
+    this.logger.log('Warming up CA tables into PG shared_buffers via pg_prewarm...');
+    // 1GB shared_buffers 기준: 모니터링 필수 CA + alerts (총 ~907MB)
+    // CA는 뷰이므로 기저 청크를 개별 prewarm해야 함
+    const caViews = [
+      'cagg_usage_1h',          // 63MB - MON-001/003
+      'cagg_trend_usage_1h',    // 87MB - MON-001/003
+      'cagg_quality_1h',        // 152MB - MON-005
+      'cagg_usage_15min',       // 239MB - 줌
+      'cagg_trend_usage_15min', // 128MB - 줌
+    ];
+    // 일반 테이블 prewarm
+    const plainTables = ['alerts']; // 238MB - MON-001 KPI
+    let totalPages = 0;
+
+    // 1) CA 청크 prewarm
+    for (const caView of caViews) {
+      try {
+        const chunks = await this.prisma.$queryRawUnsafe<{ chunk: string }[]>(`
+          SELECT c.chunk_schema || '.' || c.chunk_name AS chunk
+          FROM timescaledb_information.chunks c
+          JOIN timescaledb_information.continuous_aggregates ca
+            ON c.hypertable_schema = ca.materialization_hypertable_schema
+            AND c.hypertable_name = ca.materialization_hypertable_name
+          WHERE ca.view_name = '${caView}'
+        `);
+        let caPages = 0;
+        for (const { chunk } of chunks) {
+          const result = await this.prisma.$queryRawUnsafe<{ pg_prewarm: bigint }[]>(
+            `SELECT pg_prewarm('${chunk}')`,
+          );
+          caPages += Number(result?.[0]?.pg_prewarm ?? 0);
+        }
+        totalPages += caPages;
+        this.logger.log(`  ${caView}: ${caPages} pages (${chunks.length} chunks)`);
+      } catch (e) {
+        this.logger.warn(`  ${caView}: ${e.message}`);
+      }
+    }
+
+    // 2) 일반 테이블 prewarm
+    for (const tbl of plainTables) {
+      try {
+        const result = await this.prisma.$queryRawUnsafe<{ pg_prewarm: bigint }[]>(
+          `SELECT pg_prewarm('${tbl}')`,
+        );
+        const pages = Number(result?.[0]?.pg_prewarm ?? 0);
+        totalPages += pages;
+        this.logger.log(`  ${tbl}: ${pages} pages`);
+      } catch (e) {
+        this.logger.warn(`  ${tbl}: ${e.message}`);
+      }
+    }
+
+    const elapsed = ((Date.now() - start) / 1000).toFixed(1);
+    const sizeMB = ((totalPages * 8) / 1024).toFixed(0);
+    this.logger.log(`CA warm-up done: ${totalPages} pages (~${sizeMB}MB) in ${elapsed}s`);
   }
 
   // MON-001: 종합 현황 - KPI (적산차 + 리셋 보정치 방식)
@@ -70,7 +125,7 @@ export class MonitoringService {
         this.prisma.$queryRaw<any[]>`
           WITH diff AS (
             SELECT c."tagId", c.energy_type::text,
-              LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) as usage
+              GREATEST(0, LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket)) as usage
             FROM cagg_usage_1h c
             WHERE c.bucket >= ${todayUtc} AND c.bucket < ${nextDayUtc}
               AND c.last_value IS NOT NULL
@@ -105,7 +160,7 @@ export class MonitoringService {
         this.prisma.$queryRaw<any[]>`
           WITH diff AS (
             SELECT c."tagId", c.energy_type::text,
-              LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) as usage
+              GREATEST(0, LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket)) as usage
             FROM cagg_usage_1h c
             WHERE c.bucket >= ${yesterdayUtc} AND c.bucket < ${todayUtc}
               AND c.last_value IS NOT NULL
@@ -204,7 +259,7 @@ export class MonitoringService {
       const lineData = await this.prisma.$queryRaw<any[]>`
         WITH tag_usage AS (
           SELECT u."facilityId", u.energy_type,
-            LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+            GREATEST(0, LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket)) as usage
           FROM cagg_usage_1h u
           WHERE u.bucket >= ${todayUtc} AND u.bucket < ${nextDayUtc}
           GROUP BY u."facilityId", u.energy_type
@@ -281,8 +336,7 @@ export class MonitoringService {
     this.logger.log(`📊 Fetching hourly trend for date: ${date || 'today'}`);
 
     try {
-      const targetDate = date ? new Date(date) : new Date();
-      targetDate.setHours(0, 0, 0, 0);
+      const targetDate = startOfDay(date);
       const nextDay = new Date(targetDate);
       nextDay.setDate(nextDay.getDate() + 1);
 
@@ -301,7 +355,7 @@ export class MonitoringService {
             SUM(sub.tag_usage) as usage
           FROM (
             SELECT c.energy_type::text, date_trunc('hour', c.bucket + ${KST_OFFSET}) as hb,
-              LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) as tag_usage
+              GREATEST(0, LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket)) as tag_usage
             FROM cagg_usage_1h c
             WHERE c.bucket >= ${targetUtc} AND c.bucket < ${nextDayUtc} AND c.last_value IS NOT NULL
             GROUP BY c."tagId", c.energy_type, date_trunc('hour', c.bucket + ${KST_OFFSET})
@@ -325,7 +379,7 @@ export class MonitoringService {
             SUM(sub.tag_usage) as usage
           FROM (
             SELECT c.energy_type::text, date_trunc('hour', c.bucket + ${KST_OFFSET}) as hb,
-              LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) as tag_usage
+              GREATEST(0, LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket)) as tag_usage
             FROM cagg_usage_1h c
             WHERE c.bucket >= ${prevDayUtc} AND c.bucket < ${targetUtc} AND c.last_value IS NOT NULL
             GROUP BY c."tagId", c.energy_type, date_trunc('hour', c.bucket + ${KST_OFFSET})
@@ -424,8 +478,7 @@ export class MonitoringService {
     this.logger.log(`Fetching line detail chart: ${line}, date: ${date}, interval: ${interval}s`);
 
     try {
-      const targetDate = date ? new Date(date) : new Date();
-      targetDate.setHours(0, 0, 0, 0);
+      const targetDate = startOfDay(date);
       const nextDay = new Date(targetDate);
       nextDay.setDate(nextDay.getDate() + 1);
       const prevDay = new Date(targetDate);
@@ -528,7 +581,7 @@ export class MonitoringService {
           WITH tag_usage AS (
             SELECT u."tagId", u.energy_type,
               FLOOR(EXTRACT(EPOCH FROM (u.bucket + ${KST_OFFSET} - date_trunc('day', u.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw} as epoch,
-              LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+              GREATEST(0, LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket)) as usage
             FROM cagg_usage_1h u
             JOIN facilities f ON u."facilityId" = f.id
             JOIN lines l ON f."lineId" = l.id
@@ -573,7 +626,7 @@ export class MonitoringService {
           WITH tag_usage AS (
             SELECT u."tagId", u.energy_type,
               FLOOR(EXTRACT(EPOCH FROM (u.bucket + ${KST_OFFSET} - date_trunc('day', u.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw} as epoch,
-              LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+              GREATEST(0, LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket)) as usage
             FROM cagg_usage_1h u
             JOIN facilities f ON u."facilityId" = f.id
             JOIN lines l ON f."lineId" = l.id
@@ -621,7 +674,7 @@ export class MonitoringService {
           WITH tag_usage AS (
             SELECT u."tagId", u.energy_type,
               FLOOR(EXTRACT(EPOCH FROM (u.bucket + ${KST_OFFSET} - date_trunc('day', u.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw} as epoch,
-              LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+              GREATEST(0, LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket)) as usage
             FROM cagg_usage_15min u
             JOIN facilities f ON u."facilityId" = f.id
             JOIN lines l ON f."lineId" = l.id
@@ -660,7 +713,7 @@ export class MonitoringService {
           WITH tag_usage AS (
             SELECT u."tagId", u.energy_type,
               FLOOR(EXTRACT(EPOCH FROM (u.bucket + ${KST_OFFSET} - date_trunc('day', u.bucket + ${KST_OFFSET}))) / ${intervalRaw})::INTEGER * ${intervalRaw} as epoch,
-              LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+              GREATEST(0, LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket)) as usage
             FROM cagg_usage_15min u
             JOIN facilities f ON u."facilityId" = f.id
             JOIN lines l ON f."lineId" = l.id
@@ -822,43 +875,43 @@ export class MonitoringService {
 
     try {
       const today = todayStart();
-      const weekAgo = new Date(today);
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
+      const weekAgo = daysAgo(7, today);
+      const yesterday = daysAgo(1, today);
 
       const lineCode = line.toUpperCase();
       const todayUtc = toUtcSql(today);
       const weekAgoUtc = toUtcSql(weekAgo);
       const yesterdayUtc = toUtcSql(yesterday);
 
-      // 설비별 당일/주간/전일 집계 (VIEW 바이패스 — CA 직접 조회)
-      // Today: minute CAs, Weekly/Yesterday: hourly CAs
+      // 성능 최적화: Aggregate-First 패턴 + SQL ROW_NUMBER()
+      // 기존: EXISTS (행마다 correlated subquery → Nested Loop 442회) + JS O(n²) findIndex
+      // 개선: cagg 먼저 GROUP BY (1회 scan → ~442행) → Hash Join → ROW_NUMBER()
+      // EXPLAIN 결과: EXISTS 1914ms → Aggregate-First 580ms (3.3배 개선)
       const ranking = await this.prisma.$queryRaw<any[]>`
-        WITH daily_usage AS (
+        WITH line_fac AS (
+          SELECT f.id FROM facilities f JOIN lines l ON f."lineId" = l.id
+          WHERE ${lineCode} = 'ALL' OR l.code = ${lineCode}
+        ),
+        daily_usage AS (
           SELECT sub."facilityId", sub.energy_type, SUM(sub.usage) AS usage FROM (
-            SELECT u."facilityId", u.energy_type::text AS energy_type, SUM(u.raw_usage_diff) AS usage
-            FROM cagg_usage_1min u
-            WHERE u.bucket >= ${todayUtc}
-              AND EXISTS (
-                SELECT 1 FROM facility_energy_configs fec
-                WHERE fec."facilityId" = u."facilityId"
-                AND fec."energyType"::text = u.energy_type::text
-                AND fec."calcMethod"::text = 'DIFF' AND fec."isActive" = true
-              )
-            GROUP BY u."facilityId", u.energy_type
+            SELECT ca."facilityId", ca.energy_type, ca.usage FROM (
+              SELECT "facilityId", energy_type::text AS energy_type, SUM(GREATEST(0, raw_usage_diff)) AS usage
+              FROM cagg_usage_1h WHERE "facilityId" IN (SELECT id FROM line_fac) AND bucket >= ${todayUtc}
+              GROUP BY "facilityId", energy_type
+            ) ca
+            INNER JOIN facility_energy_configs fec
+              ON ca."facilityId" = fec."facilityId" AND ca.energy_type = fec."energyType"::text
+              AND fec."calcMethod"::text = 'DIFF' AND fec."isActive" = true
             UNION ALL
-            SELECT t."facilityId", t.energy_type::text AS energy_type,
-              SUM(CASE WHEN t.energy_type::text = 'elec' THEN t.avg_value / 60.0 ELSE t.avg_value END) AS usage
-            FROM cagg_trend_usage_1min t
-            WHERE t.bucket >= ${todayUtc}
-              AND EXISTS (
-                SELECT 1 FROM facility_energy_configs fec
-                WHERE fec."facilityId" = t."facilityId"
-                AND fec."energyType"::text = t.energy_type::text
-                AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
-              )
-            GROUP BY t."facilityId", t.energy_type
+            SELECT ca."facilityId", ca.energy_type, ca.usage FROM (
+              SELECT "facilityId", energy_type::text AS energy_type,
+                SUM(CASE WHEN energy_type::text = 'elec' THEN sum_value / 60.0 ELSE sum_value END) AS usage
+              FROM cagg_trend_usage_1h WHERE "facilityId" IN (SELECT id FROM line_fac) AND bucket >= ${todayUtc}
+              GROUP BY "facilityId", energy_type
+            ) ca
+            INNER JOIN facility_energy_configs fec
+              ON ca."facilityId" = fec."facilityId" AND ca.energy_type = fec."energyType"::text
+              AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
           ) sub GROUP BY sub."facilityId", sub.energy_type
         ),
         daily_agg AS (
@@ -869,28 +922,24 @@ export class MonitoringService {
         ),
         weekly_usage AS (
           SELECT sub."facilityId", sub.energy_type, SUM(sub.usage) AS usage FROM (
-            SELECT u."facilityId", u.energy_type::text AS energy_type, SUM(u.raw_usage_diff) AS usage
-            FROM cagg_usage_1h u
-            WHERE u.bucket >= ${weekAgoUtc}
-              AND EXISTS (
-                SELECT 1 FROM facility_energy_configs fec
-                WHERE fec."facilityId" = u."facilityId"
-                AND fec."energyType"::text = u.energy_type::text
-                AND fec."calcMethod"::text = 'DIFF' AND fec."isActive" = true
-              )
-            GROUP BY u."facilityId", u.energy_type
+            SELECT ca."facilityId", ca.energy_type, ca.usage FROM (
+              SELECT "facilityId", energy_type::text AS energy_type, SUM(GREATEST(0, raw_usage_diff)) AS usage
+              FROM cagg_usage_1h WHERE "facilityId" IN (SELECT id FROM line_fac) AND bucket >= ${weekAgoUtc}
+              GROUP BY "facilityId", energy_type
+            ) ca
+            INNER JOIN facility_energy_configs fec
+              ON ca."facilityId" = fec."facilityId" AND ca.energy_type = fec."energyType"::text
+              AND fec."calcMethod"::text = 'DIFF' AND fec."isActive" = true
             UNION ALL
-            SELECT t."facilityId", t.energy_type::text AS energy_type,
-              SUM(CASE WHEN t.energy_type::text = 'elec' THEN t.sum_value / 60.0 ELSE t.sum_value END) AS usage
-            FROM cagg_trend_usage_1h t
-            WHERE t.bucket >= ${weekAgoUtc}
-              AND EXISTS (
-                SELECT 1 FROM facility_energy_configs fec
-                WHERE fec."facilityId" = t."facilityId"
-                AND fec."energyType"::text = t.energy_type::text
-                AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
-              )
-            GROUP BY t."facilityId", t.energy_type
+            SELECT ca."facilityId", ca.energy_type, ca.usage FROM (
+              SELECT "facilityId", energy_type::text AS energy_type,
+                SUM(CASE WHEN energy_type::text = 'elec' THEN sum_value / 60.0 ELSE sum_value END) AS usage
+              FROM cagg_trend_usage_1h WHERE "facilityId" IN (SELECT id FROM line_fac) AND bucket >= ${weekAgoUtc}
+              GROUP BY "facilityId", energy_type
+            ) ca
+            INNER JOIN facility_energy_configs fec
+              ON ca."facilityId" = fec."facilityId" AND ca.energy_type = fec."energyType"::text
+              AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
           ) sub GROUP BY sub."facilityId", sub.energy_type
         ),
         weekly_agg AS (
@@ -901,28 +950,24 @@ export class MonitoringService {
         ),
         prev_daily_usage AS (
           SELECT sub."facilityId", sub.energy_type, SUM(sub.usage) AS usage FROM (
-            SELECT u."facilityId", u.energy_type::text AS energy_type, SUM(u.raw_usage_diff) AS usage
-            FROM cagg_usage_1h u
-            WHERE u.bucket >= ${yesterdayUtc} AND u.bucket < ${todayUtc}
-              AND EXISTS (
-                SELECT 1 FROM facility_energy_configs fec
-                WHERE fec."facilityId" = u."facilityId"
-                AND fec."energyType"::text = u.energy_type::text
-                AND fec."calcMethod"::text = 'DIFF' AND fec."isActive" = true
-              )
-            GROUP BY u."facilityId", u.energy_type
+            SELECT ca."facilityId", ca.energy_type, ca.usage FROM (
+              SELECT "facilityId", energy_type::text AS energy_type, SUM(GREATEST(0, raw_usage_diff)) AS usage
+              FROM cagg_usage_1h WHERE "facilityId" IN (SELECT id FROM line_fac) AND bucket >= ${yesterdayUtc} AND bucket < ${todayUtc}
+              GROUP BY "facilityId", energy_type
+            ) ca
+            INNER JOIN facility_energy_configs fec
+              ON ca."facilityId" = fec."facilityId" AND ca.energy_type = fec."energyType"::text
+              AND fec."calcMethod"::text = 'DIFF' AND fec."isActive" = true
             UNION ALL
-            SELECT t."facilityId", t.energy_type::text AS energy_type,
-              SUM(CASE WHEN t.energy_type::text = 'elec' THEN t.sum_value / 60.0 ELSE t.sum_value END) AS usage
-            FROM cagg_trend_usage_1h t
-            WHERE t.bucket >= ${yesterdayUtc} AND t.bucket < ${todayUtc}
-              AND EXISTS (
-                SELECT 1 FROM facility_energy_configs fec
-                WHERE fec."facilityId" = t."facilityId"
-                AND fec."energyType"::text = t.energy_type::text
-                AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
-              )
-            GROUP BY t."facilityId", t.energy_type
+            SELECT ca."facilityId", ca.energy_type, ca.usage FROM (
+              SELECT "facilityId", energy_type::text AS energy_type,
+                SUM(CASE WHEN energy_type::text = 'elec' THEN sum_value / 60.0 ELSE sum_value END) AS usage
+              FROM cagg_trend_usage_1h WHERE "facilityId" IN (SELECT id FROM line_fac) AND bucket >= ${yesterdayUtc} AND bucket < ${todayUtc}
+              GROUP BY "facilityId", energy_type
+            ) ca
+            INNER JOIN facility_energy_configs fec
+              ON ca."facilityId" = fec."facilityId" AND ca.energy_type = fec."energyType"::text
+              AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
           ) sub GROUP BY sub."facilityId", sub.energy_type
         ),
         prev_daily_agg AS (
@@ -930,54 +975,49 @@ export class MonitoringService {
             SUM(CASE WHEN energy_type = 'elec' THEN usage ELSE 0 END) AS "prevDailyElec",
             SUM(CASE WHEN energy_type = 'air' THEN usage ELSE 0 END) AS "prevDailyAir"
           FROM prev_daily_usage GROUP BY "facilityId"
+        ),
+        base AS (
+          SELECT
+            f.id AS "facilityId", f.code, f.name, f.process, f.status, f."isProcessing",
+            COALESCE(d."dailyElec", 0) AS "dailyElec",
+            COALESCE(d."dailyAir", 0) AS "dailyAir",
+            COALESCE(w."weeklyElec", 0) AS "weeklyElec",
+            COALESCE(w."weeklyAir", 0) AS "weeklyAir",
+            COALESCE(p."prevDailyElec", 0) AS "prevDailyElec",
+            COALESCE(p."prevDailyAir", 0) AS "prevDailyAir"
+          FROM facilities f
+          JOIN lines l ON f."lineId" = l.id
+          LEFT JOIN daily_agg d ON f.id = d."facilityId"
+          LEFT JOIN weekly_agg w ON f.id = w."facilityId"
+          LEFT JOIN prev_daily_agg p ON f.id = p."facilityId"
+          WHERE (${lineCode} = 'ALL' OR l.code = ${lineCode})
         )
-        SELECT
-          f.id AS "facilityId", f.code, f.name, f.process, f.status, f."isProcessing",
-          COALESCE(d."dailyElec", 0) AS "dailyElec",
-          COALESCE(d."dailyAir", 0) AS "dailyAir",
-          COALESCE(w."weeklyElec", 0) AS "weeklyElec",
-          COALESCE(w."weeklyAir", 0) AS "weeklyAir",
-          COALESCE(p."prevDailyElec", 0) AS "prevDailyElec",
-          COALESCE(p."prevDailyAir", 0) AS "prevDailyAir"
-        FROM facilities f
-        JOIN lines l ON f."lineId" = l.id
-        LEFT JOIN daily_agg d ON f.id = d."facilityId"
-        LEFT JOIN weekly_agg w ON f.id = w."facilityId"
-        LEFT JOIN prev_daily_agg p ON f.id = p."facilityId"
-        WHERE (${lineCode} = 'ALL' OR l.code = ${lineCode})
+        SELECT *,
+          ROW_NUMBER() OVER (ORDER BY "dailyElec" DESC) AS "rankElec",
+          ROW_NUMBER() OVER (ORDER BY "dailyAir" DESC) AS "rankAir",
+          ROW_NUMBER() OVER (ORDER BY "prevDailyElec" DESC) AS "prevRankElec",
+          ROW_NUMBER() OVER (ORDER BY "prevDailyAir" DESC) AS "prevRankAir"
+        FROM base
       `;
 
-      // 순위 계산 + 순위 변동
-      const sortedByElec = [...ranking].sort((a, b) => Number(b.dailyElec) - Number(a.dailyElec));
-      const sortedByAir = [...ranking].sort((a, b) => Number(b.dailyAir) - Number(a.dailyAir));
-      const prevSortedByElec = [...ranking].sort((a, b) => Number(b.prevDailyElec) - Number(a.prevDailyElec));
-      const prevSortedByAir = [...ranking].sort((a, b) => Number(b.prevDailyAir) - Number(a.prevDailyAir));
-
-      return ranking.map((r) => {
-        const rankElec = sortedByElec.findIndex((s) => s.facilityId === r.facilityId) + 1;
-        const rankAir = sortedByAir.findIndex((s) => s.facilityId === r.facilityId) + 1;
-        const prevRankElec = prevSortedByElec.findIndex((s) => s.facilityId === r.facilityId) + 1;
-        const prevRankAir = prevSortedByAir.findIndex((s) => s.facilityId === r.facilityId) + 1;
-
-        return {
-          facilityId: r.facilityId,
-          code: r.code,
-          name: r.name,
-          process: r.process || 'OP00',
-          dailyElec: Number(r.dailyElec),
-          weeklyElec: Number(r.weeklyElec),
-          dailyAir: Number(r.dailyAir),
-          weeklyAir: Number(r.weeklyAir),
-          prevDailyElec: Number(r.prevDailyElec),
-          prevDailyAir: Number(r.prevDailyAir),
-          rankElec,
-          rankAir,
-          rankChangeElec: prevRankElec - rankElec,
-          rankChangeAir: prevRankAir - rankAir,
-          status: r.status,
-          isProcessing: r.isProcessing,
-        };
-      });
+      return ranking.map((r) => ({
+        facilityId: r.facilityId,
+        code: r.code,
+        name: r.name,
+        process: r.process || 'OP00',
+        dailyElec: Number(r.dailyElec),
+        weeklyElec: Number(r.weeklyElec),
+        dailyAir: Number(r.dailyAir),
+        weeklyAir: Number(r.weeklyAir),
+        prevDailyElec: Number(r.prevDailyElec),
+        prevDailyAir: Number(r.prevDailyAir),
+        rankElec: Number(r.rankElec),
+        rankAir: Number(r.rankAir),
+        rankChangeElec: Number(r.prevRankElec) - Number(r.rankElec),
+        rankChangeAir: Number(r.prevRankAir) - Number(r.rankAir),
+        status: r.status,
+        isProcessing: r.isProcessing,
+      }));
     } catch (error) {
       this.logger.error('Error fetching energy ranking:', error);
       throw error;
@@ -992,42 +1032,38 @@ export class MonitoringService {
       const today = todayStart();
       const lastMonth = new Date(today);
       lastMonth.setMonth(lastMonth.getMonth() - 1);
-      const lastYear = new Date(today);
-      lastYear.setFullYear(lastYear.getFullYear() - 1);
-      const lastYearEnd = new Date(lastYear);
-      lastYearEnd.setDate(lastYearEnd.getDate() + 30);
 
       const lineCode = line.toUpperCase();
       const todayUtc = toUtcSql(today);
       const lastMonthUtc = toUtcSql(lastMonth);
 
-      // 설비별 당월/전월 에너지 집계 (VIEW 바이패스 — CA 직접 조회)
-      // Current(today): minute CAs, Prev month: hourly CAs
+      // 성능 최적화: Aggregate-First 패턴 (MON-003과 동일)
+      // 기존: CTE(diff_cfg/trap_cfg) + INNER JOIN → PostgreSQL CTE 물리화로 Nested Loop
+      // 개선: cagg 먼저 GROUP BY (서브쿼리) → 집계 결과를 facility_energy_configs와 Hash Join
       const data = await this.prisma.$queryRaw<any[]>`
-        WITH current_usage AS (
+        WITH line_fac AS (
+          SELECT f.id FROM facilities f JOIN lines l ON f."lineId" = l.id WHERE l.code = ${lineCode}
+        ),
+        current_usage AS (
           SELECT sub."facilityId", sub.energy_type, SUM(sub.usage) AS usage FROM (
-            SELECT u."facilityId", u.energy_type::text AS energy_type, SUM(u.raw_usage_diff) AS usage
-            FROM cagg_usage_1min u
-            WHERE u.bucket >= ${todayUtc}
-              AND EXISTS (
-                SELECT 1 FROM facility_energy_configs fec
-                WHERE fec."facilityId" = u."facilityId"
-                AND fec."energyType"::text = u.energy_type::text
-                AND fec."calcMethod"::text = 'DIFF' AND fec."isActive" = true
-              )
-            GROUP BY u."facilityId", u.energy_type
+            SELECT ca."facilityId", ca.energy_type, ca.usage FROM (
+              SELECT "facilityId", energy_type::text AS energy_type, SUM(GREATEST(0, raw_usage_diff)) AS usage
+              FROM cagg_usage_1h WHERE "facilityId" IN (SELECT id FROM line_fac) AND bucket >= ${todayUtc}
+              GROUP BY "facilityId", energy_type
+            ) ca
+            INNER JOIN facility_energy_configs fec
+              ON ca."facilityId" = fec."facilityId" AND ca.energy_type = fec."energyType"::text
+              AND fec."calcMethod"::text = 'DIFF' AND fec."isActive" = true
             UNION ALL
-            SELECT t."facilityId", t.energy_type::text AS energy_type,
-              SUM(CASE WHEN t.energy_type::text = 'elec' THEN t.avg_value / 60.0 ELSE t.avg_value END) AS usage
-            FROM cagg_trend_usage_1min t
-            WHERE t.bucket >= ${todayUtc}
-              AND EXISTS (
-                SELECT 1 FROM facility_energy_configs fec
-                WHERE fec."facilityId" = t."facilityId"
-                AND fec."energyType"::text = t.energy_type::text
-                AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
-              )
-            GROUP BY t."facilityId", t.energy_type
+            SELECT ca."facilityId", ca.energy_type, ca.usage FROM (
+              SELECT "facilityId", energy_type::text AS energy_type,
+                SUM(CASE WHEN energy_type::text = 'elec' THEN sum_value / 60.0 ELSE sum_value END) AS usage
+              FROM cagg_trend_usage_1h WHERE "facilityId" IN (SELECT id FROM line_fac) AND bucket >= ${todayUtc}
+              GROUP BY "facilityId", energy_type
+            ) ca
+            INNER JOIN facility_energy_configs fec
+              ON ca."facilityId" = fec."facilityId" AND ca.energy_type = fec."energyType"::text
+              AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
           ) sub GROUP BY sub."facilityId", sub.energy_type
         ),
         current_agg AS (
@@ -1038,28 +1074,24 @@ export class MonitoringService {
         ),
         prev_month_usage AS (
           SELECT sub."facilityId", sub.energy_type, SUM(sub.usage) AS usage FROM (
-            SELECT u."facilityId", u.energy_type::text AS energy_type, SUM(u.raw_usage_diff) AS usage
-            FROM cagg_usage_1h u
-            WHERE u.bucket >= ${lastMonthUtc} AND u.bucket < ${todayUtc}
-              AND EXISTS (
-                SELECT 1 FROM facility_energy_configs fec
-                WHERE fec."facilityId" = u."facilityId"
-                AND fec."energyType"::text = u.energy_type::text
-                AND fec."calcMethod"::text = 'DIFF' AND fec."isActive" = true
-              )
-            GROUP BY u."facilityId", u.energy_type
+            SELECT ca."facilityId", ca.energy_type, ca.usage FROM (
+              SELECT "facilityId", energy_type::text AS energy_type, SUM(GREATEST(0, raw_usage_diff)) AS usage
+              FROM cagg_usage_1h WHERE "facilityId" IN (SELECT id FROM line_fac) AND bucket >= ${lastMonthUtc} AND bucket < ${todayUtc}
+              GROUP BY "facilityId", energy_type
+            ) ca
+            INNER JOIN facility_energy_configs fec
+              ON ca."facilityId" = fec."facilityId" AND ca.energy_type = fec."energyType"::text
+              AND fec."calcMethod"::text = 'DIFF' AND fec."isActive" = true
             UNION ALL
-            SELECT t."facilityId", t.energy_type::text AS energy_type,
-              SUM(CASE WHEN t.energy_type::text = 'elec' THEN t.sum_value / 60.0 ELSE t.sum_value END) AS usage
-            FROM cagg_trend_usage_1h t
-            WHERE t.bucket >= ${lastMonthUtc} AND t.bucket < ${todayUtc}
-              AND EXISTS (
-                SELECT 1 FROM facility_energy_configs fec
-                WHERE fec."facilityId" = t."facilityId"
-                AND fec."energyType"::text = t.energy_type::text
-                AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
-              )
-            GROUP BY t."facilityId", t.energy_type
+            SELECT ca."facilityId", ca.energy_type, ca.usage FROM (
+              SELECT "facilityId", energy_type::text AS energy_type,
+                SUM(CASE WHEN energy_type::text = 'elec' THEN sum_value / 60.0 ELSE sum_value END) AS usage
+              FROM cagg_trend_usage_1h WHERE "facilityId" IN (SELECT id FROM line_fac) AND bucket >= ${lastMonthUtc} AND bucket < ${todayUtc}
+              GROUP BY "facilityId", energy_type
+            ) ca
+            INNER JOIN facility_energy_configs fec
+              ON ca."facilityId" = fec."facilityId" AND ca.energy_type = fec."energyType"::text
+              AND fec."calcMethod"::text = 'INTEGRAL_TRAP' AND fec."isActive" = true
           ) sub GROUP BY sub."facilityId", sub.energy_type
         ),
         prev_month_agg AS (
@@ -1127,7 +1159,7 @@ export class MonitoringService {
       const startUtc = toUtcSql(start);
       const endUtc = toUtcSql(end);
 
-      // cagg_quality_1min: 1분 버킷 품질 집계
+      // cagg_quality_1h: 1시간 버킷 품질 집계 (24M→43만행, cold 쿼리 55배 개선)
       // tag_name 패턴으로 3상 전류(A/B/C)와 역률(PF) 구분
       // 불평형률 = (MAX상 - MIN상) / AVG상 × 100
       const ranking = await this.prisma.$queryRaw<any[]>`
@@ -1139,8 +1171,11 @@ export class MonitoringService {
             AVG(CASE WHEN q.tag_name ~ '_C$' AND q.tag_name !~ 'PF' THEN q.avg_value END) AS "phaseC",
             AVG(CASE WHEN q.tag_name ~ 'PF' THEN q.avg_value END) AS "avgPf",
             MIN(CASE WHEN q.tag_name ~ 'PF' THEN q.min_value END) AS "minPf"
-          FROM cagg_quality_1min q
-          WHERE q.bucket >= ${startUtc} AND q.bucket < ${endUtc}
+          FROM cagg_quality_1h q
+          WHERE q."facilityId" IN (
+            SELECT f.id FROM facilities f JOIN lines l ON f."lineId" = l.id WHERE l.code = ${lineCode}
+          )
+            AND q.bucket >= ${startUtc} AND q.bucket < ${endUtc}
           GROUP BY q."facilityId"
         )
         SELECT
@@ -1227,21 +1262,29 @@ export class MonitoringService {
     try {
       const lineCode = line.toUpperCase();
 
-      // 1) 라인 조회
-      const lineRecord = await this.prisma.line.findUnique({ where: { code: lineCode } });
+      // 성능 최적화: 순차 쿼리 → 병렬 실행 (line + system_settings 동시 조회)
+      const [lineRecord, costRow] = await Promise.all([
+        this.prisma.line.findUnique({ where: { code: lineCode } }),
+        this.prisma.$queryRaw<{ value: any }[]>`
+          SELECT value FROM system_settings WHERE key = 'air_cost_per_liter'
+        `,
+      ]);
       if (!lineRecord) return [];
+      const AIR_COST_PER_LITER = Number(costRow[0]?.value) || 0.5;
 
-      // 2) 오늘 dayType 결정 (ProductionCalendar 예외 우선)
-      const now = new Date();
-      const kstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-      const todayStr = kstNow.toISOString().slice(0, 10);
+      // 2) 오늘 dayType 결정 + 비생산 스케줄 조회 (병렬)
+      const kst = kstNow();
+      const todayStr = toDateStr(kst);
 
-      const calEntry = await this.prisma.productionCalendar.findFirst({
-        where: {
-          date: new Date(todayStr + 'T00:00:00'),
-          OR: [{ lineId: lineRecord.id }, { lineId: null }],
-        },
-      });
+      const [calEntry, dow] = await Promise.all([
+        this.prisma.productionCalendar.findFirst({
+          where: {
+            date: new Date(todayStr + 'T00:00:00'),
+            OR: [{ lineId: lineRecord.id }, { lineId: null }],
+          },
+        }),
+        Promise.resolve(kst.getDay()),
+      ]);
 
       let dayType: string;
       if (calEntry?.type === 'holiday' || calEntry?.type === 'shutdown') {
@@ -1249,7 +1292,6 @@ export class MonitoringService {
       } else if (calEntry?.type === 'workday') {
         dayType = 'weekday';
       } else {
-        const dow = kstNow.getDay();
         dayType = dow === 0 ? 'sunday' : dow === 6 ? 'saturday' : 'weekday';
       }
 
@@ -1293,38 +1335,35 @@ export class MonitoringService {
       const BUCKET_SEC = 10;
       const BUCKET_MIN_FACTOR = BUCKET_SEC / 60; // 10/60 = 0.1667
 
-      // 5) 집계 쿼리 (전체 + 초과 분리)
+      // 5) 집계 쿼리: 직접 LEFT JOIN (CTE 없음)
+      // facilities 기준 LEFT JOIN cagg_trend_10sec → PG가 설비별 인덱스(facilityId, bucket) 활용
+      // CTE 물리화/인라인 문제를 원천 회피
       const ranking = await this.prisma.$queryRaw<any[]>`
         SELECT
-          f.id as "facilityId",
+          f.id AS "facilityId",
           f.code,
           f.name,
           f.process,
           f.metadata,
-          COUNT(c.last_value)::int as "totalBuckets",
-          AVG(c.last_value) as "avgFlow",
-          MAX(c.last_value) as "maxFlow",
-          SUM(c.last_value) as "sumFlow",
+          COUNT(c.last_value)::int AS "totalBuckets",
+          COALESCE(AVG(c.last_value), 0) AS "avgFlow",
+          COALESCE(MAX(c.last_value), 0) AS "maxFlow",
+          COALESCE(SUM(c.last_value), 0) AS "sumFlow",
           COUNT(CASE
             WHEN c.last_value > COALESCE(
               (f.metadata->'thresholds'->'air_leak'->>'threshold1')::numeric, 5000
             ) THEN 1
-          END)::int as "exceedBuckets"
+          END)::int AS "exceedBuckets"
         FROM facilities f
         JOIN lines l ON f."lineId" = l.id
-        LEFT JOIN cagg_trend_10sec c ON f.id = c."facilityId"
+        LEFT JOIN cagg_trend_10sec c
+          ON c."facilityId" = f.id
           AND c.energy_type::text = 'air'
           AND ${timeFilter}
         WHERE l.code = ${lineCode}
         GROUP BY f.id, f.code, f.name, f.process, f.metadata
-        ORDER BY "sumFlow" DESC NULLS LAST
+        ORDER BY COALESCE(SUM(c.last_value), 0) DESC
       `;
-
-      // 에어 단가 (원/L) — system_settings 테이블에서 조회
-      const costRow = await this.prisma.$queryRaw<{ value: any }[]>`
-        SELECT value FROM system_settings WHERE key = 'air_cost_per_liter'
-      `;
-      const AIR_COST_PER_LITER = Number(costRow[0]?.value) || 0.5;
 
       // 6) 적산 기반 계산
       return ranking.map((r, idx) => {
@@ -1415,7 +1454,7 @@ export class MonitoringService {
 
     // 0. Check cache first
     const cacheKey = this.getCacheKey(facilityId, metric, query);
-    const cached = this.getFromCache(cacheKey);
+    const cached = this.cache.get<RangeDataResponse>(cacheKey);
     if (cached) {
       this.logger.debug(`✅ Cache HIT: ${cacheKey}`);
       return cached;
@@ -1427,7 +1466,7 @@ export class MonitoringService {
     const end = new Date(endTime);
 
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      throw new BadRequestException('Invalid date format. Use ISO8601 UTC format (YYYY-MM-DDTHH:mm:ssZ).');
+      throw new InvalidDateFormatException();
     }
 
     if (start >= end) {
@@ -1499,7 +1538,7 @@ export class MonitoringService {
     };
 
     // 7. Store in cache
-    this.setToCache(cacheKey, response, interval);
+    this.cache.set(cacheKey, response, this.getTTL(interval));
 
     return response;
   }
@@ -1523,7 +1562,7 @@ export class MonitoringService {
 
     // 0. Cache check
     const cacheKey = `line:${lineCode}:${metric}:${query.startTime}:${query.endTime}:${query.interval}`;
-    const cached = this.getFromCache(cacheKey);
+    const cached = this.cache.get<RangeDataResponse>(cacheKey);
     if (cached) {
       this.logger.debug(`✅ Cache HIT: ${cacheKey}`);
       return cached;
@@ -1535,7 +1574,7 @@ export class MonitoringService {
     const end = new Date(endTime);
 
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      throw new BadRequestException('Invalid date format. Use ISO8601 UTC format (YYYY-MM-DDTHH:mm:ssZ).');
+      throw new InvalidDateFormatException();
     }
 
     if (start >= end) {
@@ -1547,7 +1586,7 @@ export class MonitoringService {
       where: { code: lineCode.toUpperCase() },
     });
     if (!line) {
-      throw new NotFoundException(`Line not found: ${lineCode}`);
+      throw new EntityNotFoundException('Line', lineCode);
     }
 
     // 3. TimescaleDB 쿼리 실행 (라인 UUID 기반 서브쿼리 필터링)
@@ -1600,7 +1639,7 @@ export class MonitoringService {
     };
 
     // 7. Cache
-    this.setToCache(cacheKey, response, interval);
+    this.cache.set(cacheKey, response, this.getTTL(interval));
 
     this.logger.log(`✅ Line ${lineCode}: returned ${finalData.length} points (zoom level: ${metadata.zoomLevel})`);
     return response;
@@ -1625,7 +1664,7 @@ export class MonitoringService {
 
     // 0. Cache check
     const cacheKey = `factory:${factoryCode}:${metric}:${query.startTime}:${query.endTime}:${query.interval}`;
-    const cached = this.getFromCache(cacheKey);
+    const cached = this.cache.get<RangeDataResponse>(cacheKey);
     if (cached) {
       this.logger.debug(`✅ Cache HIT: ${cacheKey}`);
       return cached;
@@ -1637,7 +1676,7 @@ export class MonitoringService {
     const end = new Date(endTime);
 
     if (isNaN(start.getTime()) || isNaN(end.getTime())) {
-      throw new BadRequestException('Invalid date format. Use ISO8601 UTC format (YYYY-MM-DDTHH:mm:ssZ).');
+      throw new InvalidDateFormatException();
     }
 
     if (start >= end) {
@@ -1649,7 +1688,7 @@ export class MonitoringService {
       where: { code: factoryCode },
     });
     if (!factory) {
-      throw new NotFoundException(`Factory not found: ${factoryCode}`);
+      throw new EntityNotFoundException('Factory', factoryCode);
     }
 
     // 3. TimescaleDB 쿼리 실행 (공장 UUID 기반 서브쿼리 필터링)
@@ -1701,7 +1740,7 @@ export class MonitoringService {
     };
 
     // 7. Cache
-    this.setToCache(cacheKey, response, interval);
+    this.cache.set(cacheKey, response, this.getTTL(interval));
 
     this.logger.log(`✅ Factory ${factoryCode}: returned ${finalData.length} points (zoom level: ${metadata.zoomLevel})`);
     return response;
@@ -1730,7 +1769,7 @@ export class MonitoringService {
     const bucketInterval = INTERVAL_TO_BUCKET[interval];
 
     if (!bucketInterval) {
-      throw new BadRequestException(`Invalid interval: ${interval}`);
+      throw new InvalidIntervalException(interval);
     }
 
     // 전일 시간 범위
@@ -1782,12 +1821,20 @@ export class MonitoringService {
       const integralConvHourly = rawEnergyType === 'elec' ? 'sum_value / 60.0' : 'sum_value';
       const integralConvMinute = rawEnergyType === 'elec' ? 'avg_value / 60.0' : 'avg_value';
 
-      if (interval === '1h' || interval === '1d') {
-        // ── Hourly/Daily CA 직접 조회 (cagg_usage_combined_1min VIEW 우회) ──
-        // 1h: cagg_usage_1h + cagg_trend_usage_1h → 24행/태그 (1분 CA 1440행 대비 60배 감소)
-        // 1d: cagg_usage_1d + cagg_trend_usage_1d
-        const diffTable = interval === '1h' ? 'cagg_usage_1h' : 'cagg_usage_1d';
-        const integralTable = interval === '1h' ? 'cagg_trend_usage_1h' : 'cagg_trend_usage_1d';
+      if (interval === '1h' || interval === '1d' || interval === '15m' || interval === '5m') {
+        // ── 5m/15m/1h/1d CA 직접 조회 ──
+        // 5m: cagg_usage_5min + cagg_trend_usage_5min → 160만행
+        // 15m: cagg_usage_15min + cagg_trend_usage_15min → 51만행
+        // 1h: cagg_usage_1h + cagg_trend_usage_1h → 14만행
+        // 1d: cagg_usage_1d + cagg_trend_usage_1d → 6천행
+        const diffTable = interval === '1d' ? 'cagg_usage_1d'
+                        : interval === '1h' ? 'cagg_usage_1h'
+                        : interval === '15m' ? 'cagg_usage_15min'
+                        : 'cagg_usage_5min';
+        const integralTable = interval === '1d' ? 'cagg_trend_usage_1d'
+                            : interval === '1h' ? 'cagg_trend_usage_1h'
+                            : interval === '15m' ? 'cagg_trend_usage_15min'
+                            : 'cagg_trend_usage_5min';
 
         sql = `
           WITH time_slots AS (
@@ -1799,7 +1846,7 @@ export class MonitoringService {
           ),
           current_data AS (
             SELECT bucket, SUM(usage) AS value FROM (
-              SELECT bucket, raw_usage_diff AS usage
+              SELECT bucket, GREATEST(0, raw_usage_diff) AS usage
               FROM ${diffTable}
               WHERE ${facWhere}bucket >= ${pS}::timestamp AND bucket < ${pE}::timestamp
                 AND energy_type = '${energyType}'
@@ -1813,7 +1860,7 @@ export class MonitoringService {
           ),
           prev_data AS (
             SELECT bucket, SUM(usage) AS ${prevColumn} FROM (
-              SELECT bucket, raw_usage_diff AS usage
+              SELECT bucket, GREATEST(0, raw_usage_diff) AS usage
               FROM ${diffTable}
               WHERE ${facWhere}bucket >= ${pPS}::timestamp AND bucket < ${pPE}::timestamp
                 AND energy_type = '${energyType}'
@@ -1835,7 +1882,7 @@ export class MonitoringService {
           ORDER BY ts.bucket;
         `;
       } else {
-        // ── 분 단위 CA 직접 조회 (1m, 5m, 15m, 1M) ──
+        // ── 분 단위 CA 직접 조회 (1m only) ──
         // cagg_usage_1min (CA 직접) + cagg_trend_usage_1min (VIEW 우회)
         // SUM(raw_usage_diff): LEFT JOIN 오버헤드 제거 (리셋 보정은 극히 드물어 차트에서 무시 가능)
         sql = `
@@ -1850,7 +1897,7 @@ export class MonitoringService {
             SELECT bucket, SUM(usage) AS value FROM (
               SELECT
                 time_bucket('${bucketInterval}', bucket) AS bucket,
-                SUM(raw_usage_diff) AS usage
+                SUM(GREATEST(0, raw_usage_diff)) AS usage
               FROM cagg_usage_1min
               WHERE ${facWhere}bucket >= ${pS}::timestamp AND bucket < ${pE}::timestamp
                 AND energy_type = '${energyType}'
@@ -1870,7 +1917,7 @@ export class MonitoringService {
             SELECT bucket, SUM(usage) AS ${prevColumn} FROM (
               SELECT
                 time_bucket('${bucketInterval}', bucket) AS bucket,
-                SUM(raw_usage_diff) AS usage
+                SUM(GREATEST(0, raw_usage_diff)) AS usage
               FROM cagg_usage_1min
               WHERE ${facWhere}bucket >= ${pPS}::timestamp AND bucket < ${pPE}::timestamp
                 AND energy_type = '${energyType}'
@@ -1932,7 +1979,7 @@ export class MonitoringService {
           GROUP BY 1, r.tag_id
         ),
         current_data AS (
-          SELECT cr.bucket, SUM(cr.raw_diff + COALESCE(rc.correction, 0)) AS value
+          SELECT cr.bucket, SUM(GREATEST(0, cr.raw_diff + COALESCE(rc.correction, 0))) AS value
           FROM cur_tag_raw cr
           LEFT JOIN cur_reset rc ON cr.bucket = rc.bucket AND cr."tagId" = rc."tagId"
           GROUP BY cr.bucket
@@ -1962,7 +2009,7 @@ export class MonitoringService {
           GROUP BY 1, r.tag_id
         ),
         prev_data AS (
-          SELECT pr.bucket, SUM(pr.raw_diff + COALESCE(prc.correction, 0)) AS ${prevColumn}
+          SELECT pr.bucket, SUM(GREATEST(0, pr.raw_diff + COALESCE(prc.correction, 0))) AS ${prevColumn}
           FROM prev_tag_raw pr
           LEFT JOIN prev_reset prc ON pr.bucket = prc.bucket AND pr."tagId" = prc."tagId"
           GROUP BY pr.bucket
@@ -2059,45 +2106,7 @@ export class MonitoringService {
   }
 
   /**
-   * Get data from cache (if not expired)
-   */
-  private getFromCache(key: string): RangeDataResponse | null {
-    const entry = this.rangeCache.get(key);
-    if (!entry) return null;
-
-    const now = Date.now();
-    if (now - entry.timestamp > entry.ttl) {
-      this.rangeCache.delete(key);
-      return null;
-    }
-
-    return entry.data;
-  }
-
-  /**
-   * Store data in cache with TTL based on interval
-   */
-  private setToCache(
-    key: string,
-    data: RangeDataResponse,
-    interval: IntervalEnum,
-  ): void {
-    const ttl = this.getTTL(interval);
-    this.rangeCache.set(key, {
-      data,
-      timestamp: Date.now(),
-      ttl,
-    });
-  }
-
-  /**
    * Get TTL (Time-To-Live) in milliseconds based on interval
-   *
-   * Interval별 캐시 유효 시간:
-   * - 15m: 300초 (5분) - 가장 안정적인 데이터
-   * - 1m: 180초 (3분) - 자주 갱신되는 데이터
-   * - 10s: 60초 (1분) - 실시간에 가까운 데이터
-   * - 1s: 30초 (30초) - 거의 실시간 데이터
    */
   private getTTL(interval: IntervalEnum): number {
     switch (interval) {
@@ -2111,27 +2120,6 @@ export class MonitoringService {
         return 30 * 1000; // 30 seconds
       default:
         return 60 * 1000; // 1 minute (fallback)
-    }
-  }
-
-  /**
-   * Cleanup expired cache entries
-   *
-   * Runs every 5 minutes automatically
-   */
-  private cleanupExpiredCache(): void {
-    const now = Date.now();
-    let cleaned = 0;
-
-    for (const [key, entry] of this.rangeCache.entries()) {
-      if (now - entry.timestamp > entry.ttl) {
-        this.rangeCache.delete(key);
-        cleaned++;
-      }
-    }
-
-    if (cleaned > 0) {
-      this.logger.debug(`🧹 Cleaned ${cleaned} expired cache entries`);
     }
   }
 

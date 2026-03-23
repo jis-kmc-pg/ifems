@@ -42,7 +42,7 @@ export default function DSH006PowerQualityRanking() {
   const { line, filter: lineFilter } = useLineFilter();
   const [date, setDate] = useState(TODAY);
 
-  const { data, refetch } = useQuery({
+  const { data, refetch, isLoading } = useQuery({
     queryKey: ['dsh-pq-ranking', line],
     queryFn: () => getPowerQualityRanking(line === 'all' ? undefined : (line as 'block')),
   });
@@ -97,9 +97,9 @@ export default function DSH006PowerQualityRanking() {
 
       {/* KPI */}
       <div className="grid grid-cols-3 gap-3 flex-shrink-0">
-        <KpiCard label="기준 초과(불평형)" value={overLimit} unit="개" inverseChange />
-        <KpiCard label="평균 역률" value={avgPF.toFixed(1)} unit="%" />
-        <KpiCard label="역률 미달 설비" value={lowPF} unit="개" inverseChange />
+        <KpiCard label="기준 초과(불평형)" value={overLimit} unit="개" inverseChange isLoading={isLoading} />
+        <KpiCard label="평균 역률" value={avgPF.toFixed(1)} unit="%" isLoading={isLoading} />
+        <KpiCard label="역률 미달 설비" value={lowPF} unit="개" inverseChange isLoading={isLoading} />
       </div>
 
       <FilterBar
@@ -119,6 +119,8 @@ export default function DSH006PowerQualityRanking() {
           className="flex-1"
           chartId="dsh006-unbalance"
           minHeight={0}
+          isLoading={isLoading}
+          loadingText="전력 품질 조회 중..."
         >
           <SvgBarChart
             data={sortedByUnbalance}
@@ -141,6 +143,8 @@ export default function DSH006PowerQualityRanking() {
           className="flex-1"
           chartId="dsh006-pf"
           minHeight={0}
+          isLoading={isLoading}
+          loadingText="역률 데이터 조회 중..."
         >
           <SvgBarChart
             data={sortedByPF}
@@ -160,7 +164,7 @@ export default function DSH006PowerQualityRanking() {
 
       {/* 테이블 */}
       <div className="flex-1 min-h-0 overflow-auto">
-        <SortableTable data={rows} columns={columns} stickyHeader compact />
+        <SortableTable data={rows} columns={columns} stickyHeader compact loading={isLoading} />
       </div>
     </div>
   );

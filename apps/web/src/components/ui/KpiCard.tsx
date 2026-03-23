@@ -10,11 +10,13 @@ interface KpiCardProps {
   changeLabel?: string;
   /** true = 증가가 나쁨 (에너지 소비, 알림 등) */
   inverseChange?: boolean;
+  /** 로딩 중일 때 스켈레톤 표시 */
+  isLoading?: boolean;
   className?: string;
 }
 
 const KpiCard = memo(function KpiCard({
-  label, value, unit, change, changeLabel = 'vs 전일', inverseChange = false, className,
+  label, value, unit, change, changeLabel = 'vs 전일', inverseChange = false, isLoading, className,
 }: KpiCardProps) {
   const isUp = (change ?? 0) > 0;
   const isDown = (change ?? 0) < 0;
@@ -34,18 +36,27 @@ const KpiCard = memo(function KpiCard({
   return (
     <div className={cn('bg-white dark:bg-[#16213E] rounded-lg p-4 shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col gap-2', className)}>
       <div className="text-xs text-gray-500 dark:text-gray-400 font-medium">{label}</div>
-      <div className="flex items-baseline gap-1">
-        <span className="text-2xl font-bold text-gray-900 dark:text-white font-mono tabular-nums">
-          {typeof value === 'number' ? value.toLocaleString('ko-KR') : value}
-        </span>
-        {unit && <span className="text-sm text-gray-500 dark:text-gray-400">{unit}</span>}
-      </div>
-      {change !== undefined && (
-        <div className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium w-fit', badgeColor)}>
-          <Icon size={12} />
-          <span>{change >= 0 ? '+' : ''}{change.toFixed(1)}%</span>
-          <span className="text-[10px] opacity-70">{changeLabel}</span>
-        </div>
+      {isLoading ? (
+        <>
+          <div className="h-7 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+          <div className="h-4 w-16 bg-gray-100 dark:bg-gray-700/50 rounded animate-pulse" />
+        </>
+      ) : (
+        <>
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-bold text-gray-900 dark:text-white font-mono tabular-nums">
+              {typeof value === 'number' ? value.toLocaleString('ko-KR') : value}
+            </span>
+            {unit && <span className="text-sm text-gray-500 dark:text-gray-400">{unit}</span>}
+          </div>
+          {change !== undefined && (
+            <div className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium w-fit', badgeColor)}>
+              <Icon size={12} />
+              <span>{change >= 0 ? '+' : ''}{change.toFixed(1)}%</span>
+              <span className="text-[10px] opacity-70">{changeLabel}</span>
+            </div>
+          )}
+        </>
       )}
     </div>
   );

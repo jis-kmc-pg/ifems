@@ -109,7 +109,7 @@ async function main() {
     dataPoints.push({
       timestamp,
       tagId: usageTag.id,
-      numericValue: 1000 + i * 0.5, // 0.5 kWh씩 증가
+      value: 1000 + i * 0.5, // 0.5 kWh씩 증가
       quality: 'GOOD',
     });
 
@@ -117,7 +117,7 @@ async function main() {
     dataPoints.push({
       timestamp,
       tagId: trendTag.id,
-      numericValue: 100 + Math.sin(i / 10) * 20, // 80~120 kW 사이 변동
+      value: 100 + Math.sin(i / 10) * 20, // 80~120 kW 사이 변동
       quality: 'GOOD',
     });
 
@@ -125,7 +125,7 @@ async function main() {
     dataPoints.push({
       timestamp,
       tagId: sensorTag.id,
-      numericValue: 25 + Math.random() * 5, // 25~30°C
+      value: 25 + Math.random() * 5, // 25~30°C
       quality: 'GOOD',
     });
   }

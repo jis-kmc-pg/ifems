@@ -9,15 +9,20 @@ import { PrismaService } from '../prisma.service';
  * - 10초마다 USAGE 태그의 리셋 감지 (10% 이상 감소)
  * - 1분마다 분당 사용량 이상 감지 (N배 이상 변동)
  * - meter_reset_events 테이블에 자동 기록
+ *
+ * 환경변수:
+ *   RESET_THRESHOLD (기본 0.1) — 리셋 감지 임계값 (10% 감소)
+ *   ANOMALY_MULTIPLIER (기본 5) — 이상 감지 배율
+ *   ANOMALY_MAX_CONSECUTIVE (기본 2) — 직전값 대체 최대 연속 분
  */
 @Injectable()
 export class ResetDetectorService {
   private readonly logger = new Logger(ResetDetectorService.name);
-  private readonly RESET_THRESHOLD = 0.1; // 10% 감소
+  private readonly RESET_THRESHOLD = parseFloat(process.env.RESET_THRESHOLD || '0.1');
 
   // 이상 감지 기본값 (설비별 설정으로 오버라이드 가능)
-  private readonly DEFAULT_ANOMALY_MULTIPLIER = 5; // 5배 이상 변동
-  private readonly DEFAULT_MAX_CONSECUTIVE = 2;    // 2분까지 직전 정상값 대체, 3분+ → NULL
+  private readonly DEFAULT_ANOMALY_MULTIPLIER = parseInt(process.env.ANOMALY_MULTIPLIER || '5', 10);
+  private readonly DEFAULT_MAX_CONSECUTIVE = parseInt(process.env.ANOMALY_MAX_CONSECUTIVE || '2', 10);
 
   constructor(private readonly prisma: PrismaService) {}
 

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { Prisma } from '@prisma/client';
-import { todayStart, daysAgo, roundTo, toUtcSql, KST_OFFSET } from '../common/utils/date-time.utils';
+import { todayStart, daysAgo, roundTo, toUtcSql, KST_OFFSET, startOfDay } from '../common/utils/date-time.utils';
 
 @Injectable()
 export class AnalysisService {
@@ -67,8 +67,7 @@ export class AnalysisService {
     this.logger.log(`Fetching hourly data for facility: ${facilityId}, type: ${type}`);
 
     try {
-      const targetDate = date ? new Date(date) : new Date();
-      targetDate.setHours(0, 0, 0, 0);
+      const targetDate = startOfDay(date);
       const nextDay = new Date(targetDate);
       nextDay.setDate(nextDay.getDate() + 1);
       const prevDate = new Date(targetDate);
@@ -93,7 +92,7 @@ export class AnalysisService {
         WITH tag_usage AS (
           SELECT u."tagId",
             EXTRACT(HOUR FROM u.bucket + ${KST_OFFSET}) as hour,
-            LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+            GREATEST(0, LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket)) as usage
           FROM cagg_usage_1h u
           JOIN facilities f ON u."facilityId" = f.id
           WHERE ${facilityFilter}
@@ -128,7 +127,7 @@ export class AnalysisService {
         WITH tag_usage AS (
           SELECT u."tagId",
             EXTRACT(HOUR FROM u.bucket + ${KST_OFFSET}) as hour,
-            LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+            GREATEST(0, LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket)) as usage
           FROM cagg_usage_1h u
           JOIN facilities f ON u."facilityId" = f.id
           WHERE ${facilityFilter}
@@ -621,27 +620,41 @@ export class AnalysisService {
     const start = new Date(startTime);
     const end = new Date(endTime);
 
-    // 2. 순시값 조회 (tag_data_raw에서 직접)
-    const bucketInterval = interval === '1s' ? '1 second' : '10 seconds';
-
-    // tagId 목록을 SQL 안전하게 구성 (Prisma findMany 결과 = 안전한 UUID)
+    // 2. 순시값 조회: 10s → cagg_trend_10sec (CA), 1s → tag_data_raw (직접)
     const tagIdList = tagIds.map(id => `'${id}'`).join(',');
 
-    const rows = await this.prisma.$queryRawUnsafe<
-      Array<{ bucket: Date; tagId: string; avg_value: number }>
-    >(`
-      SELECT
-        time_bucket('${bucketInterval}', t.timestamp) AS bucket,
-        t."tagId",
-        AVG(t.value) as avg_value
-      FROM tag_data_raw t
-      WHERE t."tagId" IN (${tagIdList})
-        AND t.timestamp >= $1::timestamp
-        AND t.timestamp < $2::timestamp
-        AND t.value IS NOT NULL
-      GROUP BY bucket, t."tagId"
-      ORDER BY bucket ASC
-    `, start.toISOString(), end.toISOString());
+    let rows: Array<{ bucket: Date; tagId: string; avg_value: number }>;
+
+    if (interval === '1s') {
+      // 1초 해상도: raw 테이블 직접 (줌 시 짧은 범위만 조회)
+      rows = await this.prisma.$queryRawUnsafe(`
+        SELECT
+          time_bucket('1 second', t.timestamp) AS bucket,
+          t."tagId",
+          AVG(t.value) as avg_value
+        FROM tag_data_raw t
+        WHERE t."tagId" IN (${tagIdList})
+          AND t.timestamp >= $1::timestamp
+          AND t.timestamp < $2::timestamp
+          AND t.value IS NOT NULL
+        GROUP BY bucket, t."tagId"
+        ORDER BY bucket ASC
+      `, start.toISOString(), end.toISOString());
+    } else {
+      // 10초 해상도: cagg_trend_10sec CA 활용 (24GB vs 186GB raw)
+      rows = await this.prisma.$queryRawUnsafe(`
+        SELECT
+          c.bucket,
+          c."tagId",
+          c.last_value as avg_value
+        FROM cagg_trend_10sec c
+        WHERE c."tagId" IN (${tagIdList})
+          AND c.bucket >= $1::timestamp
+          AND c.bucket < $2::timestamp
+          AND c.last_value IS NOT NULL
+        ORDER BY c.bucket ASC
+      `, start.toISOString(), end.toISOString());
+    }
 
     // 3. 태그ID → tagName 매핑
     const tagIdToName = new Map(tags.map(t => [t.id, t.tagName]));

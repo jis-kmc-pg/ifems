@@ -24,13 +24,13 @@ export default function ALT001PowerQualityStats() {
   const { line, filter: lineFilter } = useLineFilter();
   const [period, setPeriod] = useState('8w');
 
-  const { data: kpi } = useQuery({
+  const { data: kpi, isLoading: kpiLoading } = useQuery({
     queryKey: ['alt-pq-kpi'],
     queryFn: () => getAlertStatsKpi('power_quality'),
     refetchInterval: 10000,
     staleTime: 5000,
   });
-  const { data: trend } = useQuery({
+  const { data: trend, isLoading: trendLoading } = useQuery({
     queryKey: ['alt-pq-trend'],
     queryFn: () => getAlertTrend('power_quality'),
     refetchInterval: 10000,
@@ -49,10 +49,10 @@ export default function ALT001PowerQualityStats() {
 
       {/* KPI */}
       <div className="grid grid-cols-4 gap-3 flex-shrink-0">
-        <KpiCard label="누적 알림" value={kpi?.total ?? 0} unit="건" />
-        <KpiCard label="주간 알림" value={kpi?.weekly ?? 0} unit="건" change={kpi?.weeklyChange} inverseChange changeLabel="vs 전주" />
-        <KpiCard label="조치 완료" value={kpi?.resolved ?? 0} unit="건" />
-        <KpiCard label="조치율" value={kpi?.resolvedRate ?? 0} unit="%" />
+        <KpiCard label="누적 알림" value={kpi?.total ?? 0} unit="건" isLoading={kpiLoading} />
+        <KpiCard label="주간 알림" value={kpi?.weekly ?? 0} unit="건" change={kpi?.weeklyChange} inverseChange changeLabel="vs 전주" isLoading={kpiLoading} />
+        <KpiCard label="조치 완료" value={kpi?.resolved ?? 0} unit="건" isLoading={kpiLoading} />
+        <KpiCard label="조치율" value={kpi?.resolvedRate ?? 0} unit="%" isLoading={kpiLoading} />
       </div>
 
       <FilterBar
@@ -75,6 +75,8 @@ export default function ALT001PowerQualityStats() {
           exportData={trend}
           exportFilename="전력품질_주간트렌드"
           minHeight={0}
+          isLoading={trendLoading}
+          loadingText="알림 추이 조회 중..."
         >
           <SvgBarChart
             data={trend ?? []}

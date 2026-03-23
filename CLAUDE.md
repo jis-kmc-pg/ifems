@@ -291,19 +291,36 @@ GET /api/monitoring/range/:facilityId/air?start={ISO8601}&end={ISO8601}&interval
 4. 데이터 없음은 빈 배열 반환 (null 아님)
 5. **각 화면의 최대 Depth를 초과하는 줌은 비활성화** (UI에서 제한)
 
-### 태그 종류별 조회 방식 (KPI vs 차트, 2026-03-06)
+### 적산(CUMULATIVE) 사용량 계산 원칙 — 절대 규칙 (2026-03-18)
 
-> **⚠️ 중요**: USAGE(적산) 태그는 KPI와 차트에서 조회 방식이 다릅니다.
+> **🚫 SUM(raw_usage_diff) 사용 금지** — 적산 태그의 구간 사용량을 1분 차분의 합으로 구하면 **결측 구간 사용량이 누락**됩니다.
+
+**올바른 계산**: `LAST(last_value) - FIRST(first_value) + reset_correction`
+**잘못된 계산**: ~~`SUM(raw_usage_diff)`~~ — 적산에서 차분의 합은 결측 시 과소 계상
+
+```
+예: 10분=100→104(diff=4), 20분=결측, 30분=112→118(diff=6)
+  SUM(diff) = 10  ← 결측 구간 8 누락 (오류)
+  LAST-FIRST = 118-100 = 18  ← 정확한 사용량
+```
+
+**적용 범위**: Continuous Aggregate 상위 집계 (15min, 1h, 1d) 포함 **모든 레벨**
+- `cagg_usage_15min`: `LAST(last_value) - FIRST(first_value)`
+- `cagg_usage_1h`: `LAST(last_value) - FIRST(first_value)`
+- `cagg_usage_1d`: `LAST(last_value) - FIRST(first_value)`
+- KPI 쿼리, 사용량 리포트 등 모든 적산 집계
+
+**예외**: `cagg_usage_1min`의 `raw_usage_diff`는 1분 내 LAST-FIRST이므로 허용 (1초 수집에서 1분 내 결측은 사실상 없음)
+
+### 태그 종류별 조회 방식 (KPI vs 차트)
 
 | 태그 종류 | KPI (단일 집계값) | 차트 (시계열) |
 |----------|-----------------|-------------|
-| **USAGE** (적산) | 적산차: `LAST(last_value) - FIRST(first_value) + SUM(reset_correction)` | 보정 뷰 `corrected_usage_diff` 시계열 |
-| **TREND** (순시) | `LAST` (최신 값) 또는 `MAX` (피크) | 버킷별 `last_value` 시계열 |
+| **CUMULATIVE** (적산) | `LAST(last_value) - FIRST(first_value) + reset_correction` | 보정 뷰 `corrected_usage_diff` 시계열 |
+| **INSTANTANEOUS** (순시) | `LAST` (최신 값) 또는 `MAX` (피크) | 버킷별 `last_value` 시계열 |
 | **SENSOR** (센서) | `AVG` (평균) | 버킷별 `avg_value` 시계열 |
 | **OPERATE** (가동) | `SUM` (가동 시간) | 버킷별 `SUM` 시계열 |
 
-- KPI(일일 총 사용량)에 `SUM(raw_usage_diff)`를 쓰면 결측 구간 사용량이 누락됨
-- 적산차는 미터기의 시작~끝 값만 보므로 중간 결측과 무관하게 정확한 총량 산출
 - 상세: `docs/TAG-DATA-SPEC.md` → "용도별 조회 방식" 섹션 참조
 
 ### 이상 데이터 감지 시스템 (Anomaly Detection, 2026-03-05)
@@ -609,6 +626,7 @@ export class EnergyRankingQueryDto {
 3. **Swagger 문서화 필수** - @ApiOperation, @ApiResponse 누락 금지
 4. **에러 처리 통일** - GlobalExceptionFilter 사용 (커스텀 예외 금지)
 5. **매개변수 통일성** - type은 `'elec' | 'air'` (power 사용 금지)
+6. **🚫 적산 사용량 = LAST-FIRST** - `SUM(raw_usage_diff)` 절대 금지, 모든 레벨에서 `LAST(last_value) - FIRST(first_value)` 사용
 
 ### 공통 규칙
 1. **기능 로직 수정 금지** - 승인 없이 비즈니스 로직 변경 불가

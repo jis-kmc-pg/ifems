@@ -6,6 +6,7 @@ import { ResetDetectorService } from './reset-detector.service';
 import { UsageAggregateService } from './usage-aggregate.service';
 import { TrendAggregateService } from './trend-aggregate.service';
 import { PrismaService } from '../prisma.service';
+import { CacheService } from '../common/services/cache.service';
 
 @Module({
   controllers: [MonitoringController, LineRangeDataController, FactoryRangeDataController, DynamicResolutionController, TestCaggController],
@@ -15,7 +16,8 @@ import { PrismaService } from '../prisma.service';
     UsageAggregateService,
     TrendAggregateService,
     PrismaService,
+    CacheService,
   ],
-  exports: [UsageAggregateService, TrendAggregateService, ResetDetectorService],
+  exports: [UsageAggregateService, TrendAggregateService, ResetDetectorService, CacheService],
 })
 export class MonitoringModule {}

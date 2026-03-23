@@ -1,14 +1,34 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { Prisma } from '@prisma/client';
-import { todayStart, tomorrowStart, daysAgo, monthsAgo, roundTo, changeRate, toUtcSql, KST_OFFSET } from '../common/utils/date-time.utils';
+import { todayStart, tomorrowStart, daysAgo, monthsAgo, roundTo, changeRate, toUtcSql, KST_OFFSET, startOfDay, toDateStr, kstNow } from '../common/utils/date-time.utils';
 import { lineFilter, facilityFilter } from '../common/utils/query-helpers';
+
+/** 간단한 TTL 캐시 엔트리 */
+interface CacheEntry<T> {
+  data: T;
+  expires: number;
+}
 
 @Injectable()
 export class DashboardService {
   private readonly logger = new Logger(DashboardService.name);
 
+  /** 메서드별 TTL 캐시 (대시보드 — 느린 쿼리용) */
+  private cache = new Map<string, CacheEntry<unknown>>();
+
   constructor(private readonly prisma: PrismaService) {}
+
+  /** 캐시 조회/저장 헬퍼 (ttlMs 기본 60초) */
+  private getCached<T>(key: string, ttlMs = 60_000): T | null {
+    const entry = this.cache.get(key) as CacheEntry<T> | undefined;
+    if (entry && entry.expires > Date.now()) return entry.data;
+    return null;
+  }
+  private setCache<T>(key: string, data: T, ttlMs = 60_000): T {
+    this.cache.set(key, { data, expires: Date.now() + ttlMs });
+    return data;
+  }
 
   // DSH-001: 에너지 사용 추이 (월별 집계, 최대 14개월)
   async getEnergyTrend(line?: string) {
@@ -40,7 +60,7 @@ export class DashboardService {
             SUM(sub.tag_usage) as usage
           FROM (
             SELECT c.energy_type::text, DATE_TRUNC('month', c.bucket + ${KST_OFFSET}) as mb,
-              LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) as tag_usage
+              GREATEST(0, LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket)) as tag_usage
             FROM cagg_usage_1d c
             JOIN facilities f ON c."facilityId" = f.id
             JOIN lines l ON f."lineId" = l.id
@@ -70,7 +90,7 @@ export class DashboardService {
             SUM(sub.tag_usage) as usage
           FROM (
             SELECT c.energy_type::text, DATE_TRUNC('month', c.bucket + ${KST_OFFSET}) as mb,
-              LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) as tag_usage
+              GREATEST(0, LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket)) as tag_usage
             FROM cagg_usage_1d c
             JOIN facilities f ON c."facilityId" = f.id
             JOIN lines l ON f."lineId" = l.id
@@ -174,7 +194,7 @@ export class DashboardService {
             SUM(sub.tag_usage) as usage
           FROM (
             SELECT c."facilityId", c.energy_type::text, DATE(c.bucket + ${KST_OFFSET}) as day_bucket,
-              LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) as tag_usage
+              GREATEST(0, LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket)) as tag_usage
             FROM cagg_usage_1h c
             JOIN facilities f ON c."facilityId" = f.id
             JOIN lines l ON f."lineId" = l.id
@@ -224,7 +244,7 @@ export class DashboardService {
       const facilityMap = new Map<string, { code: string; name: string; powerMap: Map<string, number>; airMap: Map<string, number> }>();
 
       for (const row of dailyData) {
-        const dateStr = row.date instanceof Date ? row.date.toISOString().split('T')[0] : String(row.date);
+        const dateStr = row.date instanceof Date ? toDateStr(row.date) : String(row.date);
         datesSet.add(dateStr);
 
         if (!facilityMap.has(row.code)) {
@@ -271,10 +291,8 @@ export class DashboardService {
         rangeEnd = new Date(end);
       } else {
         // 하위 호환: 단일 date → 해당일 00:00~익일 00:00
-        const targetDate = date ? new Date(date) : new Date();
-        targetDate.setHours(0, 0, 0, 0);
-        rangeStart = targetDate;
-        rangeEnd = new Date(targetDate);
+        rangeStart = startOfDay(date);
+        rangeEnd = new Date(rangeStart);
         rangeEnd.setDate(rangeEnd.getDate() + 1);
       }
 
@@ -286,7 +304,7 @@ export class DashboardService {
       const processData = await this.prisma.$queryRaw<any[]>`
         WITH tag_usage AS (
           SELECT u."facilityId", u.energy_type,
-            LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket) as usage
+            GREATEST(0, LAST(u.last_value, u.bucket) - FIRST(u.first_value, u.bucket)) as usage
           FROM cagg_usage_1h u
           JOIN facilities f ON u."facilityId" = f.id
           JOIN lines l ON f."lineId" = l.id
@@ -373,7 +391,7 @@ export class DashboardService {
           SELECT f.process, sub.energy_type, SUM(sub.tag_usage) as usage
           FROM (
             SELECT c."facilityId", c.energy_type::text,
-              LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) as tag_usage
+              GREATEST(0, LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket)) as tag_usage
             FROM cagg_usage_1h c
             JOIN facilities f ON c."facilityId" = f.id
             JOIN lines l ON f."lineId" = l.id
@@ -403,7 +421,7 @@ export class DashboardService {
           SELECT f.process, sub.energy_type, SUM(sub.tag_usage) as usage
           FROM (
             SELECT c."facilityId", c.energy_type::text,
-              LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) as tag_usage
+              GREATEST(0, LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket)) as tag_usage
             FROM cagg_usage_1h c
             JOIN facilities f ON c."facilityId" = f.id
             JOIN lines l ON f."lineId" = l.id
@@ -469,86 +487,173 @@ export class DashboardService {
     }
   }
 
-  // DSH-005: 싸이클당 순위
-  async getCycleRanking(line?: string) {
-    this.logger.log(`Fetching cycle ranking for line: ${line}`);
+  // DSH-005: 싸이클당 순위 (기간별, 기본 7일)
+  // CYCLE_STD_MST_MMS + CYCLE_MMS_MAPPING 기반 실제 생산 싸이클 데이터
+  // 기준(STAND_YN=1) 대비 편차(%)가 큰 설비 순으로 정렬
+  async getCycleRanking(line?: string, startDate?: string, endDate?: string) {
+    // 기간 계산 (기본: 최근 7일)
+    const endStr = endDate || new Date().toISOString().slice(0, 10);
+    const startStr = startDate || new Date(new Date(endStr).getTime() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    const cacheKey = `cycle-ranking:${line || 'all'}:${startStr}:${endStr}`;
+    const cached = this.getCached<any[]>(cacheKey, 300_000);
+    if (cached) {
+      this.logger.log(`Cycle ranking cache hit: ${cacheKey}`);
+      return cached;
+    }
+    this.logger.log(`DSH-005 cycle ranking: ${startStr} ~ ${endStr}, line=${line || 'all'}`);
 
     try {
-      const today = todayStart();
+      // 날짜: CYCLE_STD_MST_MMS.START_DT는 varchar ('YYYY-MM-DD HH:mm:ss.SSS')
+      const lineCode = line ? line.toUpperCase() : null;
 
-      const lineCondition = lineFilter(line);
-      const todayUtc = toUtcSql(today);
+      // ── 3개 쿼리를 병렬 실행 (9.5s → ~5s) ──
+      // 1) 태그별 통계 (COUNT 집계, DISTINCT 불필요 → 1.2s)
+      // 2) 기준 통계 (partial index → ~3ms)
+      // 3) 설비별 싸이클 수 (COUNT DISTINCT → ~3.7s)
+      type TagStats = { MACH_ID: number; TAG_NAME: string; avg_duration_ms: number | null; normal_cnt: number; anomaly_cnt: number; total_cnt: number };
+      type RefRow = { code: string; ref_duration_ms: number | null };
+      type CycleCountRow = { code: string; cycle_count: number };
 
-      // 설비별 전력 사용량 (FIRST/LAST: 태그별 적산차 → 설비 합산)
-      const facilities = await this.prisma.$queryRaw<any[]>`
-        WITH tag_usage AS (
-          SELECT
-            c."tagId",
-            c."facilityId",
-            c.calc_method,
-            CASE WHEN c.calc_method = 'DIFF'
-              THEN LAST(c.last_value, c.bucket) - FIRST(c.first_value, c.bucket) + SUM(COALESCE(c.reset_correction, 0))
-              ELSE SUM(c.usage_diff)
-            END as usage
-          FROM cagg_usage_combined_1min c
-          JOIN facilities f ON c."facilityId" = f.id
-          JOIN lines l ON f."lineId" = l.id
-          WHERE c.bucket >= ${todayUtc}
-            AND c.energy_type = 'elec'
-            AND f."isProcessing" = true
-            ${lineCondition}
-          GROUP BY c."tagId", c."facilityId", c.calc_method
-        )
-        SELECT
-          f.code,
-          f.process,
-          SUM(tu.usage) as avg_power
-        FROM tag_usage tu
-        JOIN facilities f ON tu."facilityId" = f.id
-        GROUP BY f.id, f.code, f.process
-        ORDER BY avg_power DESC
-        LIMIT 10
-      `;
+      // endStr 다음 날 (START_DT < endNext → endStr 포함)
+      const endNext = new Date(new Date(endStr).getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-      // 각 설비의 기준값과 편차 계산을 위한 통계 데이터 조회
-      const results = [];
+      const [tagStats, refStats, cycleCounts] = await Promise.all([
+        // 태그별 집계 (GROUP BY MACH_ID, TAG_NAME → PK 최적화, 빠름)
+        this.prisma.$queryRawUnsafe<TagStats[]>(`
+          SELECT c."MACH_ID", c."TAG_NAME",
+            AVG(c."DIFF_DESC")::float as avg_duration_ms,
+            SUM(CASE WHEN c."STAND_YN" = 2 THEN 1 ELSE 0 END)::int as normal_cnt,
+            SUM(CASE WHEN c."STAND_YN" = 3 THEN 1 ELSE 0 END)::int as anomaly_cnt,
+            COUNT(*)::int as total_cnt
+          FROM "CYCLE_STD_MST_MMS" c
+          WHERE c."START_DT" >= $1 AND c."START_DT" < $2
+          GROUP BY c."MACH_ID", c."TAG_NAME"
+        `, startStr, endNext),
+
+        // 기준값 (STAND_YN=1 partial index → 즉시)
+        this.prisma.$queryRawUnsafe<RefRow[]>(`
+          SELECT m."MCN_CD" as code, AVG(c."DIFF_DESC")::float as ref_duration_ms
+          FROM "CYCLE_STD_MST_MMS" c
+          JOIN "CYCLE_MMS_MAPPING" m ON c."MACH_ID" = m."MACH_ID" AND c."TAG_NAME" = m."TAG_NAME"
+          WHERE c."STAND_YN" = 1
+          GROUP BY m."MCN_CD"
+        `),
+
+        // 설비별 싸이클(소재) 수 (DISTINCT 필요)
+        this.prisma.$queryRawUnsafe<CycleCountRow[]>(`
+          SELECT code, COUNT(*)::int as cycle_count FROM (
+            SELECT DISTINCT m."MCN_CD" as code, c."MATERIAL_ID"
+            FROM "CYCLE_STD_MST_MMS" c
+            JOIN "CYCLE_MMS_MAPPING" m ON c."MACH_ID" = m."MACH_ID" AND c."TAG_NAME" = m."TAG_NAME"
+            WHERE c."START_DT" >= $1 AND c."START_DT" < $2
+          ) sub
+          GROUP BY code
+        `, startStr, endNext),
+      ]);
+
+      // ── JS 매핑: MACH_ID+TAG_NAME → MCN_CD (mapping 테이블 캐시) ──
+      const mappingCacheKey = 'cycle-mapping';
+      let mapping = this.getCached<Array<{ MACH_ID: number; TAG_NAME: string; MCN_CD: string }>>(mappingCacheKey, 600_000);
+      if (!mapping) {
+        mapping = await this.prisma.$queryRawUnsafe<Array<{ MACH_ID: number; TAG_NAME: string; MCN_CD: string }>>(
+          `SELECT "MACH_ID", "TAG_NAME", "MCN_CD" FROM "CYCLE_MMS_MAPPING"`,
+        );
+        this.setCache(mappingCacheKey, mapping, 600_000);
+      }
+      const tagToCode = new Map<string, string>();
+      for (const m of mapping) tagToCode.set(`${m.MACH_ID}|${m.TAG_NAME}`, m.MCN_CD);
+
+      // ── 설비별 통계 집계 (JS에서 MCN_CD 기준으로 merge) ──
+      const facilityMap = new Map<string, { avgDuration: number[]; normalCnt: number; anomalyCnt: number; totalCnt: number }>();
+      for (const ts of tagStats) {
+        const code = tagToCode.get(`${ts.MACH_ID}|${ts.TAG_NAME}`);
+        if (!code) continue;
+        let entry = facilityMap.get(code);
+        if (!entry) {
+          entry = { avgDuration: [], normalCnt: 0, anomalyCnt: 0, totalCnt: 0 };
+          facilityMap.set(code, entry);
+        }
+        if (ts.avg_duration_ms != null) entry.avgDuration.push(ts.avg_duration_ms);
+        entry.normalCnt += ts.normal_cnt;
+        entry.anomalyCnt += ts.anomaly_cnt;
+        entry.totalCnt += ts.total_cnt;
+      }
+
+      // ref_stats → Map
+      const refMap = new Map<string, number>();
+      for (const r of refStats) if (r.ref_duration_ms != null) refMap.set(r.code, r.ref_duration_ms);
+
+      // cycleCounts → Map
+      const countMap = new Map<string, number>();
+      for (const c of cycleCounts) countMap.set(c.code, c.cycle_count);
+
+      // ── facilities + lines 조회 (캐시, 라인 필터 적용) ──
+      const facCacheKey = 'facilities-with-lines';
+      let facilities = this.getCached<Array<{ code: string; name: string; process: string; lineCode: string }>>(facCacheKey, 600_000);
+      if (!facilities) {
+        facilities = await this.prisma.$queryRawUnsafe<Array<{ code: string; name: string; process: string; lineCode: string }>>(`
+          SELECT f.code, f.name, COALESCE(f.process, 'OP00') as process, l.code as "lineCode"
+          FROM facilities f JOIN lines l ON f."lineId" = l.id
+        `);
+        this.setCache(facCacheKey, facilities, 600_000);
+      }
+
+      // ── 결과 조립 ──
+      const results: Array<{
+        code: string; name: string; process: string;
+        cycleEnergy: number | null; cycleTime: number | null;
+        refEnergy: number | null; refCycleTime: number | null;
+        deviation: number; dailyTotal: number; cycleCount: number;
+        status: 'NORMAL' | 'WARNING' | 'DANGER';
+      }> = [];
+
       for (const f of facilities) {
-        const cycleEnergy = Number(f.avg_power || 0);
+        if (lineCode && f.lineCode !== lineCode) continue;
+        const stats = facilityMap.get(f.code);
+        if (!stats) continue;
+        const cycleCount = countMap.get(f.code) || 0;
+        if (cycleCount === 0) continue;
 
-        // 실제 싸이클 데이터에서 평균 시간과 편차 조회
-        const cycleStats = await this.prisma.cycleData.findMany({
-          where: {
-            facility: { code: f.code },
-            startTime: { gte: today },
-          },
-          select: {
-            duration: true,
-            totalEnergy: true,
-          },
-        });
+        const avgDuration = stats.avgDuration.length > 0
+          ? stats.avgDuration.reduce((a, b) => a + b, 0) / stats.avgDuration.length
+          : null;
+        const cycleTime = avgDuration != null ? roundTo(avgDuration / 1000, 1) : null;
+        const refDurationMs = refMap.get(f.code);
+        const refCycleTime = refDurationMs != null ? roundTo(refDurationMs / 1000, 1) : null;
 
-        const avgDuration = cycleStats.length > 0
-          ? cycleStats.reduce((sum, c) => sum + (c.duration || 0), 0) / cycleStats.length
-          : 360; // 기본 6분
+        let deviation = 0;
+        if (cycleTime != null && refCycleTime != null && refCycleTime > 0) {
+          deviation = roundTo(((cycleTime - refCycleTime) / refCycleTime) * 100, 1);
+        }
 
-        const avgCycleEnergy = cycleStats.length > 0
-          ? cycleStats.reduce((sum, c) => sum + (c.totalEnergy || 0), 0) / cycleStats.length
-          : cycleEnergy;
+        const absDev = Math.abs(deviation);
+        const anomalyRate = stats.totalCnt > 0 ? stats.anomalyCnt / stats.totalCnt : 0;
 
-        const deviation = Math.abs(cycleEnergy - avgCycleEnergy);
+        let status: 'NORMAL' | 'WARNING' | 'DANGER';
+        if (absDev > 15 || anomalyRate > 0.8) status = 'DANGER';
+        else if (absDev > 10 || anomalyRate > 0.5) status = 'WARNING';
+        else status = 'NORMAL';
 
         results.push({
-          rank: results.length + 1,
           code: f.code,
-          process: f.process || 'OP00',
-          cycleEnergy: Math.round(cycleEnergy * 100) / 100,
-          cycleTime: Math.round(avgDuration),
-          deviation: Math.round(deviation * 10) / 10,
-          status: deviation > 15 ? ('DANGER' as const) : deviation > 10 ? ('WARNING' as const) : ('NORMAL' as const),
+          name: f.name,
+          process: f.process,
+          cycleEnergy: null,
+          cycleTime,
+          refEnergy: null,
+          refCycleTime,
+          deviation,
+          dailyTotal: 0,
+          cycleCount,
+          status,
         });
       }
 
-      return results;
+      // |편차| 큰 순 정렬 + 순위
+      results.sort((a, b) => Math.abs(b.deviation) - Math.abs(a.deviation));
+      const ranked = results.map((r, i) => ({ rank: i + 1, ...r }));
+      return this.setCache(cacheKey, ranked, 300_000); // 5분 캐시 (대용량 테이블 쿼리)
     } catch (error) {
       this.logger.error('Error fetching cycle ranking:', error);
       throw error;
@@ -559,6 +664,10 @@ export class DashboardService {
   // Frontend expects: PowerQualityData[] = { facilityId, code, name, process, unbalanceRate, unbalanceLimit, powerFactor, powerFactorLimit, status, rankUnbalance, rankPowerFactor }
   async getPowerQualityRanking(line?: string) {
     this.logger.log(`Fetching power quality ranking for line: ${line}`);
+
+    const cacheKey = `pq-ranking:${line || 'all'}`;
+    const cached = this.getCached<any[]>(cacheKey, 300_000);
+    if (cached) return cached;
 
     try {
       const today = todayStart();
@@ -573,15 +682,15 @@ export class DashboardService {
           f.code,
           f.name,
           f.process,
-          COALESCE(AVG(CASE WHEN s."sensorName" = 'imbalance' THEN s."avgValue" END), 0) as "unbalanceRate",
-          COALESCE(AVG(CASE WHEN s."sensorName" = 'powerFactor' THEN s."avgValue" END), 0) as "powerFactor"
+          COALESCE(AVG(CASE WHEN s.sensor_name = 'imbalance' THEN s.avg_value END), 0) as "unbalanceRate",
+          COALESCE(AVG(CASE WHEN s.sensor_name = 'powerFactor' THEN s.avg_value END), 0) as "powerFactor"
         FROM facilities f
         JOIN lines l ON f."lineId" = l.id
         LEFT JOIN cagg_sensor_10sec s ON f.id = s."facilityId" AND s.bucket >= ${todayUtc}
         WHERE 1=1
           ${lineCondition}
         GROUP BY f.id, f.code, f.name, f.process
-        ORDER BY AVG(CASE WHEN s."sensorName" = 'imbalance' THEN s."avgValue" END) DESC NULLS LAST
+        ORDER BY AVG(CASE WHEN s.sensor_name = 'imbalance' THEN s.avg_value END) DESC NULLS LAST
         LIMIT 20
       `;
 
@@ -589,7 +698,7 @@ export class DashboardService {
       const sortedByUnbalance = [...ranking].sort((a, b) => Number(b.unbalanceRate || 0) - Number(a.unbalanceRate || 0));
       const sortedByPF = [...ranking].sort((a, b) => Number(a.powerFactor || 0) - Number(b.powerFactor || 0));
 
-      return ranking.map((r) => {
+      const result = ranking.map((r) => {
         const unbalanceRate = Number(r.unbalanceRate || 0);
         const powerFactor = Number(r.powerFactor || 0) * 100; // DB에서 0~1 범위로 저장됨
         const pf = powerFactor > 100 ? powerFactor / 100 : powerFactor; // 이미 %인 경우 처리
@@ -610,47 +719,42 @@ export class DashboardService {
           rankPowerFactor: sortedByPF.findIndex((s) => s.facilityId === r.facilityId) + 1,
         };
       });
+
+      return this.setCache(cacheKey, result, 300_000); // 5분 캐시
     } catch (error) {
       this.logger.error('Error fetching power quality ranking:', error);
       throw error;
     }
   }
 
-  // DSH-007: 에어 누기 순위 (비생산시간 + 설비별 기준값 기반)
-  async getAirLeakRanking(line?: string) {
-    this.logger.log(`Fetching air leak ranking for line: ${line}`);
+  // DSH-007: 에어 누기 순위 (기간별, cagg_trend_1h 사용)
+  async getAirLeakRanking(line?: string, startDate?: string, endDate?: string) {
+    // 기간 계산 (기본: 최근 7일)
+    const kst = kstNow();
+    const endDt = endDate
+      ? new Date(endDate + 'T23:59:59+09:00')
+      : kst;
+    const startDt = startDate
+      ? new Date(startDate + 'T00:00:00+09:00')
+      : new Date(endDt.getFullYear(), endDt.getMonth(), endDt.getDate() - 7);
+
+    const startUtc = startDt.toISOString().slice(0, 19);
+    const endUtc = endDt.toISOString().slice(0, 19);
+
+    this.logger.log(`DSH-007 air leak ranking: ${startUtc} ~ ${endUtc}, line=${line || 'all'}`);
+
+    const cacheKey = `air-leak-ranking:${line || 'all'}:${startUtc}:${endUtc}`;
+    const cached = this.getCached<any[]>(cacheKey, 300_000);
+    if (cached) return cached;
 
     try {
       const lineCondition = lineFilter(line);
 
-      // 오늘 dayType 결정
-      const now = new Date();
-      const kstNow = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-      const todayStr = kstNow.toISOString().slice(0, 10);
+      // 원본 10sec 리딩 기준 상수 (bucket_count = 1h 내 10sec 버킷 수)
+      const READING_SEC = 10;
+      const READING_MIN_FACTOR = READING_SEC / 60;
 
-      const calEntry = await this.prisma.productionCalendar.findFirst({
-        where: {
-          date: new Date(todayStr + 'T00:00:00'),
-          lineId: null, // 공장 전체 캘린더
-        },
-      });
-
-      let dayType: string;
-      if (calEntry?.type === 'holiday' || calEntry?.type === 'shutdown') {
-        dayType = 'sunday';
-      } else if (calEntry?.type === 'workday') {
-        dayType = 'weekday';
-      } else {
-        const dow = kstNow.getDay();
-        dayType = dow === 0 ? 'sunday' : dow === 6 ? 'saturday' : 'weekday';
-      }
-
-      const todayUtc = toUtcSql(todayStart());
-
-      const BUCKET_SEC = 10;
-      const BUCKET_MIN_FACTOR = BUCKET_SEC / 60;
-
-      // 집계 (per-line 비생산 스케줄 JOIN)
+      // cagg_trend_1h: 1시간 단위 집계 → 24GB cagg_trend_10sec 대신 사용
       const ranking = await this.prisma.$queryRaw<any[]>`
         SELECT
           f.id as "facilityId",
@@ -658,38 +762,21 @@ export class DashboardService {
           f.name,
           f.process,
           f.metadata,
-          COUNT(c.last_value)::int as "totalBuckets",
-          AVG(c.last_value) as "avgFlow",
-          MAX(c.last_value) as "maxFlow",
-          SUM(c.last_value) as "sumFlow",
-          COUNT(CASE
-            WHEN c.last_value > COALESCE(
+          COALESCE(SUM(c.bucket_count), 0)::int as "totalBuckets",
+          AVG(c.avg_value) as "avgFlow",
+          MAX(c.max_value) as "maxFlow",
+          SUM(c.sum_value) as "sumFlow",
+          COALESCE(SUM(CASE
+            WHEN c.avg_value > COALESCE(
               (f.metadata->'thresholds'->'air_leak'->>'threshold1')::numeric, 5000
-            ) THEN 1
-          END)::int as "exceedBuckets"
+            ) THEN c.bucket_count ELSE 0
+          END), 0)::int as "exceedBuckets"
         FROM facilities f
         JOIN lines l ON f."lineId" = l.id
-        LEFT JOIN non_production_schedules nps
-          ON nps."lineId" = l.id AND nps."dayType" = ${dayType}
-        LEFT JOIN cagg_trend_10sec c ON f.id = c."facilityId"
+        LEFT JOIN cagg_trend_1h c ON f.id = c."facilityId"
           AND c.energy_type::text = 'air'
-          AND (
-            CASE
-              WHEN nps.id IS NULL THEN
-                c.bucket >= ${todayUtc}
-              WHEN nps."startTime" > nps."endTime" THEN (
-                (c.bucket >= ${Prisma.raw(`(CURRENT_DATE::timestamp - INTERVAL '9 hours')`)}
-                 AND c.bucket < ${Prisma.raw(`(CURRENT_DATE::timestamp + nps."endTime"::interval - INTERVAL '9 hours')`)})
-                OR
-                (c.bucket >= ${Prisma.raw(`(CURRENT_DATE::timestamp + nps."startTime"::interval - INTERVAL '9 hours')`)}
-                 AND c.bucket <= ${Prisma.raw(`(CURRENT_DATE::timestamp + INTERVAL '23 hours 59 minutes' - INTERVAL '9 hours')`)})
-              )
-              ELSE (
-                c.bucket >= ${Prisma.raw(`(CURRENT_DATE::timestamp + nps."startTime"::interval - INTERVAL '9 hours')`)}
-                AND c.bucket < ${Prisma.raw(`(CURRENT_DATE::timestamp + nps."endTime"::interval - INTERVAL '9 hours')`)}
-              )
-            END
-          )
+          AND c.bucket >= ${Prisma.raw(`'${startUtc}'::timestamp`)}
+          AND c.bucket < ${Prisma.raw(`'${endUtc}'::timestamp`)}
         WHERE 1=1
           ${lineCondition}
         GROUP BY f.id, f.code, f.name, f.process, f.metadata
@@ -703,7 +790,7 @@ export class DashboardService {
       `;
       const AIR_COST_PER_LITER = Number(costRow[0]?.value) || 0.5;
 
-      return ranking.map((r, idx) => {
+      const result = ranking.map((r, idx) => {
         const meta = r.metadata as any;
         const settings = meta?.thresholds?.air_leak;
         const baseline = settings?.threshold1 ?? 5000;
@@ -715,10 +802,10 @@ export class DashboardService {
         const maxFlow = Number(r.maxFlow || 0);
         const sumFlow = Number(r.sumFlow || 0);
 
-        const nonProdMinutes = Math.round(totalBuckets * BUCKET_SEC / 60 * 10) / 10;
-        const exceedMinutes = Math.round(exceedBuckets * BUCKET_SEC / 60 * 10) / 10;
+        const nonProdMinutes = Math.round(totalBuckets * READING_SEC / 60 * 10) / 10;
+        const exceedMinutes = Math.round(exceedBuckets * READING_SEC / 60 * 10) / 10;
         const leakRate = totalBuckets > 0 ? Math.round((exceedBuckets / totalBuckets) * 1000) / 10 : 0;
-        const nonProdUsage = Math.round(sumFlow * BUCKET_MIN_FACTOR);
+        const nonProdUsage = Math.round(sumFlow * READING_MIN_FACTOR);
         const baselineUsage = Math.round(baseline * nonProdMinutes);
         const excessUsage = Math.max(0, nonProdUsage - baselineUsage);
         const estimatedCost = Math.round(excessUsage * AIR_COST_PER_LITER);
@@ -746,6 +833,8 @@ export class DashboardService {
           rank: idx + 1,
         };
       });
+
+      return this.setCache(cacheKey, result, 300_000); // 5분 캐시
     } catch (error) {
       this.logger.error('Error fetching air leak ranking:', error);
       throw error;
@@ -777,7 +866,7 @@ export class DashboardService {
       const changes = await this.prisma.$queryRaw<any[]>`
         WITH today_usage AS (
           SELECT sub."facilityId", SUM(sub.usage) AS usage FROM (
-            SELECT u."facilityId", SUM(u.raw_usage_diff) AS usage
+            SELECT u."facilityId", SUM(GREATEST(0, u.raw_usage_diff)) AS usage
             FROM cagg_usage_1h u
             WHERE u.bucket >= ${todayUtc} AND u.energy_type::text = ${energyType}
               AND EXISTS (
@@ -802,7 +891,7 @@ export class DashboardService {
         ),
         yesterday_usage AS (
           SELECT sub."facilityId", SUM(sub.usage) AS usage FROM (
-            SELECT u."facilityId", SUM(u.raw_usage_diff) AS usage
+            SELECT u."facilityId", SUM(GREATEST(0, u.raw_usage_diff)) AS usage
             FROM cagg_usage_1h u
             WHERE u.bucket >= ${yesterdayUtc} AND u.bucket < ${yesterdaySameTimeUtc}
               AND u.energy_type::text = ${energyType}
