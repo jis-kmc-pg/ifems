@@ -11,6 +11,7 @@ import { AlertsModule } from './alerts/alerts.module';
 import { AnalysisModule } from './analysis/analysis.module';
 import { SettingsModule } from './settings/settings.module';
 import { DataCollectionModule } from './data-collection/data-collection.module';
+import { AuxModule } from './auxiliary/auxiliary.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 // import { TagsModule } from './tags/tags.module'; // Disabled: Using settings/tag API instead
 
@@ -27,6 +28,7 @@ import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
     AlertsModule,
     AnalysisModule,
     SettingsModule,
+    AuxModule,
     // TagsModule, // Disabled: Using settings/tag API instead
   ],
   controllers: [AppController],

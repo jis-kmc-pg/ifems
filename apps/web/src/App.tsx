@@ -61,6 +61,13 @@ const SET012TagMaster = lazy(() => import('./pages/settings/SET012TagMaster'));
 const SET013TagHierarchy = lazy(() => import('./pages/settings/SET013TagHierarchy'));
 const SET014EnergySourceConfig = lazy(() => import('./pages/settings/SET014EnergySourceConfig'));
 const SET015SystemSettings = lazy(() => import('./pages/settings/SET015SystemSettings'));
+// Aux (遺??ㅻ퉬: 怨듭“/議곕챸/?섍꼍)
+const AuxHvacOverview     = lazy(() => import('./pages/auxiliary/AuxHvacOverview'));
+const AuxLightingOverview = lazy(() => import('./pages/auxiliary/AuxLightingOverview'));
+const AuxZoneMaster       = lazy(() => import('./pages/auxiliary/AuxZoneMaster'));
+const AuxScheduleRules    = lazy(() => import('./pages/auxiliary/AuxScheduleRules'));
+const AuxLuxStandards     = lazy(() => import('./pages/auxiliary/AuxLuxStandards'));
+const AuxControlHistory   = lazy(() => import('./pages/auxiliary/AuxControlHistory'));
 
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
@@ -117,6 +124,13 @@ const router = createBrowserRouter([
       { path: 'settings/energy-alert', element: <SET005EnergyAlert /> },
       { path: 'settings/cycle-energy-alert', element: <SET006CycleEnergyAlert /> },
       { path: 'settings/system', element: <SET015SystemSettings /> },
+      // Aux (遺??ㅻ퉬)
+      { path: 'aux/hvac/overview',     element: <AuxHvacOverview /> },
+      { path: 'aux/lighting/overview', element: <AuxLightingOverview /> },
+      { path: 'aux/zones',             element: <AuxZoneMaster /> },
+      { path: 'aux/schedule-rules',    element: <AuxScheduleRules /> },
+      { path: 'aux/lux-standards',     element: <AuxLuxStandards /> },
+      { path: 'aux/control-history',   element: <AuxControlHistory /> },
     ],
   },
 ]);

@@ -66,6 +66,7 @@ export const GNB_MENUS = [
   { id: 'dashboard', label: '대시보드', path: '/dashboard/energy-trend' },
   { id: 'alert', label: '알림', path: '/alert/power-quality-stats' },
   { id: 'analysis', label: '분석', path: '/analysis/comparison' },
+  { id: 'aux', label: '부대설비', path: '/aux/hvac/overview' },
   { id: 'settings', label: '설정', path: '/settings/factory' },
 ] as const;
 
@@ -75,7 +76,7 @@ export const GNB_MENUS = [
 export type SidebarMenuItem = { id: string; label: string; path: string };
 export type SidebarGroupHeader = { group: string };
 export type SidebarEntry = SidebarMenuItem | SidebarGroupHeader;
-export type GnbMenuId = 'monitoring' | 'dashboard' | 'alert' | 'analysis' | 'settings';
+export type GnbMenuId = 'monitoring' | 'dashboard' | 'alert' | 'analysis' | 'aux' | 'settings';
 
 export const SIDEBAR_MENUS: Record<GnbMenuId, SidebarEntry[]> = {
   monitoring: [
@@ -119,6 +120,17 @@ export const SIDEBAR_MENUS: Record<GnbMenuId, SidebarEntry[]> = {
     // { id: 'cycle-delay', label: '싸이클 타임 지연', path: '/analysis/cycle-delay' },
     { group: '품질 분석' },
     { id: 'power-quality', label: '전력 품질 분석', path: '/analysis/power-quality' },
+  ],
+  aux: [
+    { group: '공조 (HVAC)' },
+    { id: 'hvac-overview', label: '공조 종합 현황', path: '/aux/hvac/overview' },
+    { group: '조명 (Lighting)' },
+    { id: 'lighting-overview', label: '조명 종합 현황', path: '/aux/lighting/overview' },
+    { group: '설정' },
+    { id: 'zones',           label: '공간 마스터 (Zones)', path: '/aux/zones' },
+    { id: 'schedule-rules',  label: '운전 스케줄 룰',      path: '/aux/schedule-rules' },
+    { id: 'lux-standards',   label: '작업조도 기준',       path: '/aux/lux-standards' },
+    { id: 'control-history', label: '제어 명령 이력',      path: '/aux/control-history' },
   ],
   settings: [
     { id: 'factory', label: '공장 관리', path: '/settings/factory' },
