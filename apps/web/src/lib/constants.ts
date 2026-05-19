@@ -102,6 +102,10 @@ export const SIDEBAR_MENUS: Record<GnbMenuId, SidebarEntry[]> = {
     { id: 'power-quality-history', label: '전력 품질 이력', path: '/alert/power-quality-history' },
     { id: 'air-leak-history', label: '에어 누기 이력', path: '/alert/air-leak-history' },
     { id: 'cycle-anomaly-history', label: '싸이클 이상 이력', path: '/alert/cycle-anomaly-history' },
+    { group: '부대설비 알림' },
+    { id: 'hvac-fault',          label: '공조 이상 (ALT-007)',      path: '/alert/hvac-fault' },
+    { id: 'light-fault',         label: '조명 이상 (ALT-008)',      path: '/alert/light-fault' },
+    { id: 'interlock-violation', label: '인터록 위반 (ALT-009)',    path: '/alert/interlock-violation' },
   ],
   analysis: [
     { group: '설비별 추이 (일별)' },

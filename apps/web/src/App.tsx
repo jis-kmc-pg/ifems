@@ -34,6 +34,8 @@ const ALT003CycleAnomalyStats = lazy(() => import('./pages/alert/ALT003CycleAnom
 const ALT004PowerQualityHistory = lazy(() => import('./pages/alert/ALT004PowerQualityHistory'));
 const ALT005AirLeakHistory = lazy(() => import('./pages/alert/ALT005AirLeakHistory'));
 const ALT006CycleAnomalyHistory = lazy(() => import('./pages/alert/ALT006CycleAnomalyHistory'));
+// Phase 2-③ 부대설비 알림 (ALT-007/008/009) — 공통 컴포넌트, 경로별 type 분기
+const ALT007AuxAlert = lazy(() => import('./pages/alert/ALT007AuxAlert'));
 // Analysis
 const ANL001Comparison = lazy(() => import('./pages/analysis/ANL001Comparison'));
 const ANL002DetailedComparison = lazy(() => import('./pages/analysis/ANL002DetailedComparison'));
@@ -97,6 +99,10 @@ const router = createBrowserRouter([
       { path: 'alert/power-quality-history', element: <ALT004PowerQualityHistory /> },
       { path: 'alert/air-leak-history', element: <ALT005AirLeakHistory /> },
       { path: 'alert/cycle-anomaly-history', element: <ALT006CycleAnomalyHistory /> },
+      // Phase 2-③ 부대설비 알림 (ALT-007/008/009)
+      { path: 'alert/hvac-fault',          element: <ALT007AuxAlert /> },
+      { path: 'alert/light-fault',         element: <ALT007AuxAlert /> },
+      { path: 'alert/interlock-violation', element: <ALT007AuxAlert /> },
       // Analysis
       { path: 'analysis/comparison', element: <ANL001Comparison /> },
       { path: 'analysis/detailed-comparison', element: <ANL002DetailedComparison /> },

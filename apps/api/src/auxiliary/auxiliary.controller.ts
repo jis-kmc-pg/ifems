@@ -3,6 +3,7 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { AuxService } from './auxiliary.service';
+import { RuleEngineService } from './rule-engine.service';
 import {
   CreateZoneDto, UpdateZoneDto, ZoneDto, ZoneTreeNodeDto,
 } from './dto/zone.dto';
@@ -22,7 +23,10 @@ import {
 @ApiTags('Aux')
 @Controller('aux')
 export class AuxController {
-  constructor(private readonly aux: AuxService) {}
+  constructor(
+    private readonly aux: AuxService,
+    private readonly ruleEngine: RuleEngineService,
+  ) {}
 
   // ──────────── zones ────────────
   @Get('zones')
@@ -130,5 +134,16 @@ export class AuxController {
   @ApiQuery({ name: 'hours', required: false, type: Number, description: '기본 24, 최대 168' })
   lightingTrend(@Query('hours') hours?: string) {
     return this.aux.getTypeTrend('LIGHTING', hours ? parseInt(hours, 10) : 24);
+  }
+
+  // ──────────── rule engine (수동 트리거) ────────────
+  @Post('rule-engine/run')
+  @ApiOperation({
+    summary: '룰 엔진 1회 강제 실행 (관리자 트리거)',
+    description: 'Cron(1분 간격)과 별개로 즉시 1회 평가 + 발행. 환경변수 AUX_RULE_ENGINE_ENABLED 와 무관하게 실행.',
+  })
+  async runRuleEngineNow() {
+    const result = await this.ruleEngine.runOnce();
+    return { ...result, message: `${result.issued}개 control_commands 발행됨` };
   }
 }

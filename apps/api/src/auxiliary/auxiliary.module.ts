@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuxController } from './auxiliary.controller';
 import { AuxService } from './auxiliary.service';
+import { RuleEngineService } from './rule-engine.service';
 import { PrismaService } from '../prisma.service';
 
 /**
@@ -18,7 +19,7 @@ import { PrismaService } from '../prisma.service';
  */
 @Module({
   controllers: [AuxController],
-  providers: [AuxService, PrismaService],
-  exports: [AuxService],
+  providers: [AuxService, RuleEngineService, PrismaService],
+  exports: [AuxService, RuleEngineService],
 })
 export class AuxModule {}

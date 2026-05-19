@@ -910,6 +910,12 @@ export class AlertsService {
         return 'AIR_LEAK';
       case 'cycle_anomaly':
         return 'CYCLE_ANOMALY';
+      case 'hvac_fault':
+        return 'HVAC_FAULT';
+      case 'light_fault':
+        return 'LIGHT_FAULT';
+      case 'interlock_violation':
+        return 'INTERLOCK_VIOLATION';
       default:
         return 'THRESHOLD';
     }

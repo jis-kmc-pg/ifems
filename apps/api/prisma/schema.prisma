@@ -2,12 +2,14 @@
 // 화성 PT4공장 Intelligence Facility & Energy Management System
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["public", "fems"]
 }
 
 // ============================================================
@@ -28,6 +30,7 @@ model Factory {
   lines Line[]
 
   @@map("factories")
+  @@schema("public")
 }
 
 // 라인 (Line)
@@ -48,6 +51,7 @@ model Line {
 
   @@index([factoryId])
   @@map("lines")
+  @@schema("public")
 }
 
 enum FacilityStatus {
@@ -55,6 +59,8 @@ enum FacilityStatus {
   WARNING
   DANGER
   OFFLINE
+
+  @@schema("public")
 }
 
 // 설비 유형 (FacilityType) - Phase 2
@@ -73,6 +79,7 @@ model FacilityType {
   facilities Facility[]
 
   @@map("facility_types")
+  @@schema("public")
 }
 
 // 설비 (Facility)
@@ -108,6 +115,7 @@ model Facility {
   @@index([typeId])
   @@index([status])
   @@map("facilities")
+  @@schema("public")
 }
 
 // ============================================================
@@ -119,6 +127,8 @@ enum MeasureType {
   INSTANTANEOUS // 순시값 (특정 시점의 즉시 측정)
   CUMULATIVE    // 적산값 (시간에 따라 누적)
   DISCRETE      // 이산값 (0/1, 유한 상태)
+
+  @@schema("public")
 }
 
 // 도메인 용도 (왜 측정하는가?)
@@ -128,6 +138,8 @@ enum TagCategory {
   ENVIRONMENT // 설비 주변 환경 (온도, 습도, 압력)
   OPERATION   // 설비 운전 상태 (가동/정지, 가동시간)
   CONTROL     // 설정/제어값 (목표온도, 설정압력)
+
+  @@schema("public")
 }
 
 enum EnergyType {
@@ -135,12 +147,16 @@ enum EnergyType {
   air   // 에어
   gas   // 가스
   solar // 태양광
+
+  @@schema("public")
 }
 
 // 사용량 계산 방식
 enum CalcMethod {
   DIFF           // 적산 태그의 차분 (end - start)
   INTEGRAL_TRAP  // 순시 태그의 사다리꼴 적분
+
+  @@schema("public")
 }
 
 // 태그 (Tag)
@@ -170,6 +186,7 @@ model Tag {
   @@index([category])
   @@index([energyType])
   @@map("tags")
+  @@schema("public")
 }
 
 // 태그 재할당 이력 (TagReassignmentLog) - Phase 2
@@ -190,6 +207,7 @@ model TagReassignmentLog {
   @@index([fromFacilityId])
   @@index([toFacilityId])
   @@map("tag_reassignment_logs")
+  @@schema("public")
 }
 
 // 계측기 리셋/이상 이벤트 (MeterResetEvent)
@@ -217,6 +235,7 @@ model MeterResetEvent {
   @@index([resetTime])
   @@index([eventType])
   @@map("meter_reset_events")
+  @@schema("public")
 }
 
 // ============================================================
@@ -227,6 +246,8 @@ enum DataQuality {
   GOOD
   BAD
   UNCERTAIN
+
+  @@schema("public")
 }
 
 // 데이터 소스 유형 (VQTT: Value, Quality, Timestamp, Type)
@@ -234,6 +255,8 @@ enum DataSourceType {
   TEST           // 테스트 데이터
   COMMISSIONING  // 시운전 데이터
   REAL           // 실제 운영 데이터
+
+  @@schema("public")
 }
 
 // 태그 원본 데이터 (1초~1분 단위)
@@ -250,6 +273,7 @@ model TagDataRaw {
 
   @@id([timestamp, tagId]) // Composite Primary Key for TimescaleDB
   @@map("tag_data_raw")
+  @@schema("public")
 }
 
 // 집계 데이터 (15분 단위)
@@ -278,6 +302,7 @@ model EnergyTimeseries {
 
   @@index([timestamp, facilityId])
   @@map("energy_timeseries")
+  @@schema("public")
 }
 
 // ============================================================
@@ -288,14 +313,21 @@ enum AlertSeverity {
   NORMAL
   WARNING
   DANGER
+
+  @@schema("public")
 }
 
 enum AlertType {
-  POWER_QUALITY // 전력 품질 (불평형률, 역률)
-  AIR_LEAK // 에어 누기
-  CYCLE_ANOMALY // 싸이클 이상
-  ENERGY_SPIKE // 에너지 급증
-  THRESHOLD // 임계값 초과
+  POWER_QUALITY        // 전력 품질 (불평형률, 역률)
+  AIR_LEAK             // 에어 누기
+  CYCLE_ANOMALY        // 싸이클 이상
+  ENERGY_SPIKE         // 에너지 급증
+  THRESHOLD            // 임계값 초과
+  HVAC_FAULT           // 부대설비: 공조 이상 (필터 막힘, 풍량 저하, 인버터 트립)
+  LIGHT_FAULT          // 부대설비: 조명 회로 차단/점등불량/잔존점등
+  INTERLOCK_VIOLATION  // 부대설비: 출입통제↔공조/조명 인터록 위반
+
+  @@schema("public")
 }
 
 model Alert {
@@ -333,6 +365,7 @@ model Alert {
   @@index([severity, type])
   @@index([detectedAt])
   @@map("alerts")
+  @@schema("public")
 }
 
 // ============================================================
@@ -344,6 +377,8 @@ enum CycleStatus {
   DELAYED
   ANOMALY
   INCOMPLETE
+
+  @@schema("public")
 }
 
 // 싸이클 데이터
@@ -379,6 +414,7 @@ model CycleData {
   @@index([cycleNumber])
   @@index([status])
   @@map("cycle_data")
+  @@schema("public")
 }
 
 // 기준 싸이클 (Reference Cycle)
@@ -400,6 +436,7 @@ model ReferenceCycle {
   updatedAt DateTime @updatedAt
 
   @@map("reference_cycles")
+  @@schema("public")
 }
 
 // ============================================================
@@ -429,6 +466,7 @@ model FacilityEnergyConfig {
   @@unique([facilityId, energyType])
   @@index([facilityId])
   @@map("facility_energy_configs")
+  @@schema("public")
 }
 
 // 에너지 소스 태그 매핑 상세 (config당 복수 태그)
@@ -445,6 +483,7 @@ model FacilityEnergyConfigTag {
   @@index([configId])
   @@index([tagId])
   @@map("facility_energy_config_tags")
+  @@schema("public")
 }
 
 // ============================================================
@@ -455,6 +494,8 @@ enum DayType {
   weekday
   saturday
   sunday
+
+  @@schema("public")
 }
 
 // 비생산시간 정기 스케줄 (라인별 요일 유형별)
@@ -471,12 +512,15 @@ model NonProductionSchedule {
   @@unique([lineId, dayType])
   @@index([lineId])
   @@map("non_production_schedules")
+  @@schema("public")
 }
 
 enum CalendarType {
   holiday  // 공휴일/기념일 (전체 비생산)
   workday  // 특근일 (비생산 → 생산 전환)
   shutdown // 정기보전/셧다운 (전체 비생산)
+
+  @@schema("public")
 }
 
 // 생산 캘린더 (날짜별 예외)
@@ -493,6 +537,7 @@ model ProductionCalendar {
   @@index([date])
   @@index([lineId])
   @@map("production_calendar")
+  @@schema("public")
 }
 
 // 사용량 계산 소스 변경 이력 (데이터 연속성 추적)
@@ -515,6 +560,7 @@ model FacilityEnergyConfigHistory {
 
   @@index([facilityId, changedAt])
   @@map("facility_energy_config_histories")
+  @@schema("public")
 }
 
 // ============================================================
@@ -527,4 +573,125 @@ model SystemSetting {
   updatedAt   DateTime @updatedAt
 
   @@map("system_settings")
+  @@schema("public")
+}
+
+// ============================================================
+// fems 스키마 — 부대설비(공조/조명/환경) 도메인 (Phase 2-④)
+// ============================================================
+
+// 공간 단위 — 공장 > 동 > 층 > 존 계층
+model FemsZone {
+  id        String   @id @default(dbgenerated("gen_random_uuid()::text")) @map("id")
+  code      String   @unique @db.VarChar(50)
+  name      String   @db.VarChar(100)
+  parentId  String?  @map("parentId")
+  factoryId String?  @map("factoryId")
+  areaSqm   Float?   @map("areaSqm")
+  zoneType  String   @db.VarChar(20) @map("zoneType") // PRODUCTION|OFFICE|...
+  metadata  Json?
+  isActive  Boolean  @default(true) @map("isActive")
+  createdAt DateTime @default(now()) @map("createdAt") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updatedAt") @db.Timestamptz
+
+  parent   FemsZone?  @relation("FemsZoneTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children FemsZone[] @relation("FemsZoneTree")
+
+  @@index([parentId], name: "zones_parent_idx")
+  @@index([factoryId], name: "zones_factory_idx")
+  @@index([zoneType], name: "zones_zoneType_idx")
+  @@map("zones")
+  @@schema("fems")
+}
+
+// 부대설비 자동 운전 룰 (시간/요일/조건 기반)
+model FemsScheduleRule {
+  id            String    @id @default(dbgenerated("gen_random_uuid()::text")) @map("id")
+  name          String    @db.VarChar(100)
+  description   String?   @db.Text
+  targetType    String    @db.VarChar(20) @map("targetType")   // HVAC|LIGHTING|MIXED
+  targetScope   String    @db.VarChar(20) @map("targetScope")  // FACILITY|ZONE
+  targetId      String    @map("targetId")                      // polymorphic — DB FK 없음
+  dayOfWeek     Int[]     @default([]) @map("dayOfWeek")
+  startTime     DateTime? @map("startTime") @db.Time
+  endTime       DateTime? @map("endTime")   @db.Time
+  condition     Json?
+  action        String    @db.VarChar(20)                       // ON|OFF|SETPOINT
+  actionValue   Json?     @map("actionValue")
+  priority      Int       @default(0)
+  enabled       Boolean   @default(true)
+  effectiveFrom DateTime? @map("effectiveFrom") @db.Date
+  effectiveTo   DateTime? @map("effectiveTo")   @db.Date
+  createdBy     String?   @map("createdBy") @db.VarChar(100)
+  createdAt     DateTime  @default(now()) @map("createdAt") @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @map("updatedAt") @db.Timestamptz
+
+  controlCommands FemsControlCommand[]
+
+  @@index([targetScope, targetId], name: "schedule_rules_target_idx")
+  @@index([enabled], name: "schedule_rules_enabled_idx")
+  @@index([priority(sort: Desc)], name: "schedule_rules_priority_idx")
+  @@map("schedule_rules")
+  @@schema("fems")
+}
+
+// 제어 명령 이력 (감사 추적용)
+model FemsControlCommand {
+  id            String   @id @default(dbgenerated("gen_random_uuid()::text")) @map("id")
+  ruleId        String?  @map("ruleId")
+  facilityId    String   @map("facilityId")
+  command       String   @db.VarChar(20)                        // ON|OFF|SETPOINT
+  commandValue  Json?    @map("commandValue")
+  source        String   @db.VarChar(20)                        // SCHEDULE|MANUAL|INTERLOCK|API
+  triggeredBy   String   @default("system") @map("triggeredBy") @db.VarChar(100)
+  result        String   @default("PENDING") @db.VarChar(20)    // SUCCESS|FAILED|PENDING
+  errorMessage  String?  @map("errorMessage") @db.Text
+  executedAt    DateTime @default(now()) @map("executedAt") @db.Timestamptz
+
+  rule FemsScheduleRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+
+  @@index([facilityId, executedAt(sort: Desc)], name: "control_commands_facility_time_idx")
+  @@index([ruleId],   name: "control_commands_rule_idx")
+  @@index([source],   name: "control_commands_source_idx")
+  @@index([result],   name: "control_commands_result_idx")
+  @@map("control_commands")
+  @@schema("fems")
+}
+
+// KS A 3011 작업조도 기준
+model FemsLuxStandard {
+  id           String   @id @default(dbgenerated("gen_random_uuid()::text")) @map("id")
+  zoneType     String   @unique @db.VarChar(50) @map("zoneType")
+  requiredLux  Int      @map("requiredLux")
+  description  String?  @db.Text
+  reference    String?  @db.VarChar(100)
+  createdAt    DateTime @default(now()) @map("createdAt") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updatedAt") @db.Timestamptz
+
+  @@map("lux_standards")
+  @@schema("fems")
+}
+
+// 에너지 절감효과 검증 베이스라인 (M&V)
+model FemsEnergyBaseline {
+  id            String   @id @default(dbgenerated("gen_random_uuid()::text")) @map("id")
+  name          String   @db.VarChar(100)
+  targetType    String   @db.VarChar(20) @map("targetType")   // HVAC|LIGHTING|ZONE|FACILITY
+  targetId      String   @map("targetId")
+  baselineFrom  DateTime @map("baselineFrom") @db.Date
+  baselineTo    DateTime @map("baselineTo")   @db.Date
+  modelType     String   @db.VarChar(20) @map("modelType")    // LINEAR|SEASONAL|LOOKUP|REGRESSION
+  coefficients  Json?
+  baselineKwh   Float?   @map("baselineKwh")
+  rSquared      Float?   @map("rSquared")
+  notes         String?  @db.Text
+  createdBy     String?  @map("createdBy") @db.VarChar(100)
+  isActive      Boolean  @default(true) @map("isActive")
+  createdAt     DateTime @default(now()) @map("createdAt") @db.Timestamptz
+  updatedAt     DateTime @updatedAt @map("updatedAt") @db.Timestamptz
+
+  @@index([targetType, targetId], name: "baselines_target_idx")
+  @@index([isActive], name: "baselines_active_idx")
+  @@map("energy_baselines")
+  @@schema("fems")
 }
