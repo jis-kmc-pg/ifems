@@ -10,6 +10,7 @@ const HVAC_ZONE_TYPES = ['PRODUCTION', 'OFFICE', 'CORRIDOR', 'LOUNGE'] as const;
 function ZoneCard({ zone }: { zone: Zone }) {
   const hvac = zone.hvacCount ?? 0;
   const capRT = zone.totalCapacityRt ?? 0;
+  const kwh24 = zone.hvacKwh24h ?? 0;
   const hasHvac = hvac > 0;
   return (
     <div className="bg-white dark:bg-[#16213E] border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow">
@@ -23,7 +24,7 @@ function ZoneCard({ zone }: { zone: Zone }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
+      <div className="grid grid-cols-4 gap-2 mt-3 text-xs">
         <div>
           <div className="text-gray-400">면적</div>
           <div className="font-mono text-gray-700 dark:text-gray-200">
@@ -40,6 +41,12 @@ function ZoneCard({ zone }: { zone: Zone }) {
           <div className="text-gray-400">능력(RT)</div>
           <div className="font-mono text-gray-700 dark:text-gray-200">
             {capRT > 0 ? capRT.toLocaleString() : '—'}
+          </div>
+        </div>
+        <div>
+          <div className="text-gray-400">24h kWh</div>
+          <div className={`font-mono font-semibold ${kwh24 > 0 ? 'text-[#27AE60]' : 'text-gray-400'}`}>
+            {kwh24 > 0 ? kwh24.toFixed(0) : '—'}
           </div>
         </div>
       </div>
@@ -73,6 +80,11 @@ export default function AuxHvacOverview() {
     [zones],
   );
 
+  const totalKwh24h = useMemo(
+    () => zones.reduce((sum, z) => sum + (z.hvacKwh24h ?? 0), 0),
+    [zones],
+  );
+
   return (
     <div className="flex flex-col h-full">
       <PageHeader
@@ -84,19 +96,19 @@ export default function AuxHvacOverview() {
       {/* KPI */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
         <KpiCard label="공조 대상 영역" value={hvacZones.length} unit="개" />
-        <KpiCard label="공조 면적 합계" value={totalArea.toLocaleString()} unit="㎡" />
         <KpiCard label="등록 공조기" value={totalHvac} unit="대" />
         <KpiCard label="총 냉방 능력" value={totalCapacityRt.toLocaleString()} unit="RT" />
+        <KpiCard label="24h 사용량" value={totalKwh24h.toFixed(0)} unit="kWh" />
       </div>
 
       {/* 데이터 수집 안내 */}
-      <div className="bg-[#FDB813]/10 border border-[#FDB813]/30 rounded-lg p-3 mb-4">
+      <div className="bg-[#27AE60]/10 border border-[#27AE60]/30 rounded-lg p-3 mb-4">
         <div className="flex items-start gap-2">
-          <AlertCircle size={16} className="text-[#FDB813] mt-0.5 flex-shrink-0" />
+          <AlertCircle size={16} className="text-[#27AE60] mt-0.5 flex-shrink-0" />
           <div className="text-xs text-gray-700 dark:text-gray-200">
-            <strong>샘플 공조기 {totalHvac}대 등록 완료</strong> — 인버터 전력 / SA·RA·OA 온도 / 풍량 / 댐퍼 개도 태그가
-            <code className="mx-1 px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-[11px]">tag_data_raw</code> 에 수집되면
-            실시간 트렌드·운전상태·이상감지를 표시합니다.
+            <strong>모의 시계열 데이터 활성</strong> ({totalHvac}대 공조기, 최근 24h 누적 <strong>{totalKwh24h.toFixed(0)} kWh</strong>) —
+            ifems_dev DB의 <code className="mx-1 px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-[11px]">tag_data_raw</code> 에
+            10분 간격 모의 데이터가 적재되어 있습니다. 운영 적용 시 실제 인버터/온도/풍량 태그로 자동 전환됩니다.
           </div>
         </div>
       </div>

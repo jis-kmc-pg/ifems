@@ -25,14 +25,39 @@ export class AuxService {
   // ──────────────────────────────────────────────
 
   async listZones(activeOnly = true): Promise<ZoneDto[]> {
-    // facilities 통계(HVAC/LIGHTING 카운트, 정격W 합) 를 LEFT JOIN 으로 함께 반환
+    // facilities 통계 + 24h 사용량을 LEFT JOIN 으로 함께 반환
+    //  - hvacCount/lightingCount/totalRatedW/totalCapacityRt: facility 마스터 집계
+    //  - hvacKwh24h/lightingKwh24h: tag_data_raw 24시간 차분 (CUMULATIVE) — 가짜 데이터 포함
     return this.prisma.$queryRaw<ZoneDto[]>`
+      WITH usage24 AS (
+        SELECT f."zoneId",
+               f.type,
+               t.id AS tag_id,
+               MAX(r.value) - MIN(r.value) AS diff
+          FROM public.facilities f
+          JOIN public.tags t ON t."facilityId" = f.id
+          JOIN public.tag_data_raw r
+            ON r."tagId" = t.id
+           AND r.timestamp >= NOW() - interval '24 hours'
+         WHERE f.type IN ('HVAC','LIGHTING')
+           AND t."tagName" LIKE '%_POWER'
+         GROUP BY f."zoneId", f.type, t.id
+      ),
+      usage_sum AS (
+        SELECT "zoneId",
+               SUM(diff) FILTER (WHERE type='HVAC')     AS hvac_kwh,
+               SUM(diff) FILTER (WHERE type='LIGHTING') AS lighting_kwh
+          FROM usage24
+         GROUP BY "zoneId"
+      )
       SELECT z.id, z.code, z.name, z."parentId", z."factoryId", z."areaSqm",
              z."zoneType", z.metadata, z."isActive", z."createdAt", z."updatedAt",
              COALESCE(s.hvac_count,     0)::int    AS "hvacCount",
              COALESCE(s.lighting_count, 0)::int    AS "lightingCount",
              COALESCE(s.total_rated_w,  0)::float  AS "totalRatedW",
-             COALESCE(s.total_capacity_rt, 0)::float AS "totalCapacityRt"
+             COALESCE(s.total_capacity_rt, 0)::float AS "totalCapacityRt",
+             COALESCE(u.hvac_kwh,     0)::float    AS "hvacKwh24h",
+             COALESCE(u.lighting_kwh, 0)::float    AS "lightingKwh24h"
         FROM fems.zones z
         LEFT JOIN (
           SELECT f."zoneId",
@@ -44,6 +69,7 @@ export class AuxService {
            WHERE f.type IN ('HVAC','LIGHTING')
            GROUP BY f."zoneId"
         ) s ON s."zoneId" = z.id
+        LEFT JOIN usage_sum u ON u."zoneId" = z.id
        WHERE (${!activeOnly}::boolean OR z."isActive" = true)
        ORDER BY z.code
     `;

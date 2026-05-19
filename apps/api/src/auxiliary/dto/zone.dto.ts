@@ -24,6 +24,9 @@ export class ZoneDto {
   @ApiPropertyOptional() lightingCount?: number;
   @ApiPropertyOptional() totalRatedW?: number;
   @ApiPropertyOptional() totalCapacityRt?: number;
+  // 24h 누적 사용량 (CUMULATIVE POWER tag 차분)
+  @ApiPropertyOptional() hvacKwh24h?: number;
+  @ApiPropertyOptional() lightingKwh24h?: number;
 }
 
 export class CreateZoneDto {

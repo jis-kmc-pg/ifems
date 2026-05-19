@@ -45,6 +45,9 @@ export interface Zone {
   lightingCount?: number;
   totalRatedW?: number;
   totalCapacityRt?: number;
+  // 24h 누적 사용량 (kWh)
+  hvacKwh24h?: number;
+  lightingKwh24h?: number;
 }
 
 export interface ZoneTreeNode extends Zone {

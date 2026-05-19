@@ -24,6 +24,7 @@ function zoneTypeToLuxKey(zoneType: string): string {
 function ZoneCard({ zone, requiredLux }: { zone: Zone; requiredLux?: number }) {
   const lightingCount = zone.lightingCount ?? 0;
   const ratedW = zone.totalRatedW ?? 0;
+  const kwh24 = zone.lightingKwh24h ?? 0;
   const lpd = zone.areaSqm && zone.areaSqm > 0 && ratedW > 0
     ? ratedW / zone.areaSqm
     : null;
@@ -49,21 +50,21 @@ function ZoneCard({ zone, requiredLux }: { zone: Zone; requiredLux?: number }) {
           </div>
         </div>
         <div>
-          <div className="text-gray-400">회로</div>
-          <div className={`font-mono font-semibold ${lightingCount > 0 ? 'text-[#F39C12]' : 'text-gray-400'}`}>
-            {lightingCount > 0 ? `${lightingCount}` : '미등록'}
-          </div>
-        </div>
-        <div>
-          <div className="text-gray-400">정격 W</div>
-          <div className="font-mono text-gray-700 dark:text-gray-200">
-            {ratedW > 0 ? ratedW.toLocaleString() : '—'}
+          <div className="text-gray-400">회로/정격</div>
+          <div className={`font-mono ${lightingCount > 0 ? 'text-[#F39C12]' : 'text-gray-400'}`}>
+            {lightingCount > 0 ? `${lightingCount}회 / ${(ratedW/1000).toFixed(1)}kW` : '미등록'}
           </div>
         </div>
         <div>
           <div className="text-gray-400">LPD(W/㎡)</div>
           <div className={`font-mono font-semibold ${lpdOver ? 'text-[#E74C3C]' : lpd != null ? 'text-[#27AE60]' : 'text-gray-400'}`}>
             {lpd != null ? lpd.toFixed(1) : '—'}
+          </div>
+        </div>
+        <div>
+          <div className="text-gray-400">24h kWh</div>
+          <div className={`font-mono font-semibold ${kwh24 > 0 ? 'text-[#27AE60]' : 'text-gray-400'}`}>
+            {kwh24 > 0 ? kwh24.toFixed(0) : '—'}
           </div>
         </div>
       </div>
@@ -115,6 +116,11 @@ export default function AuxLightingOverview() {
     [zones],
   );
 
+  const totalKwh24h = useMemo(
+    () => zones.reduce((sum, z) => sum + (z.lightingKwh24h ?? 0), 0),
+    [zones],
+  );
+
   return (
     <div className="flex flex-col h-full">
       <PageHeader
@@ -126,20 +132,19 @@ export default function AuxLightingOverview() {
       {/* KPI */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
         <KpiCard label="조명 대상 영역" value={lightingZones.length} unit="개" />
-        <KpiCard label="조명 면적 합계" value={totalArea.toLocaleString()} unit="㎡" />
         <KpiCard label="등록 회로 수" value={totalCircuits} unit="회로" />
         <KpiCard label="총 정격 전력" value={totalRatedKw.toFixed(1)} unit="kW" />
+        <KpiCard label="24h 사용량" value={totalKwh24h.toFixed(0)} unit="kWh" />
       </div>
 
       {/* 데이터 수집 안내 */}
-      <div className="bg-[#FDB813]/10 border border-[#FDB813]/30 rounded-lg p-3 mb-4">
+      <div className="bg-[#27AE60]/10 border border-[#27AE60]/30 rounded-lg p-3 mb-4">
         <div className="flex items-start gap-2">
-          <AlertCircle size={16} className="text-[#FDB813] mt-0.5 flex-shrink-0" />
+          <AlertCircle size={16} className="text-[#27AE60] mt-0.5 flex-shrink-0" />
           <div className="text-xs text-gray-700 dark:text-gray-200">
-            <strong>샘플 조명 회로 {totalCircuits}개 등록 완료</strong> —
-            LPD(W/㎡)는 LEED/G-SEED 기준 12 이하가 권장 (초과 시 빨강).
-            점등 ON/OFF 태그가 <code className="mx-1 px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-[11px]">tag_data_raw</code> 에 수집되면
-            구역별 점등률·조도 컴플라이언스를 실시간 표시합니다.
+            <strong>모의 시계열 데이터 활성</strong> ({totalCircuits}회로, 최근 24h 누적 <strong>{totalKwh24h.toFixed(0)} kWh</strong>) —
+            LPD는 LEED/G-SEED 기준 12 W/㎡ 이하 권장 (초과 시 빨강).
+            운영 적용 시 실제 점등 ON/OFF 태그 + 조도센서로 자동 전환됩니다.
           </div>
         </div>
       </div>
