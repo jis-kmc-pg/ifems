@@ -23,17 +23,33 @@ import { PrismaService } from '../prisma.service';
  *  - condition JSONB: PoC에서는 무시 (occupancy/oaTempLt 등은 외부 신호 필요)
  *  - 액션: control_commands INSERT (result=SUCCESS) — 실제 제어 송신은 외부 게이트웨이 영역
  */
+/**
+ * ⚠️ Phase 2 PoC 한계:
+ *  - condition JSONB 평가 미구현. {"occupancy": false}, {"oaTempLt": 18} 등은
+ *    외부 신호 (출입통제 시스템, 외기 온도 센서) 연동이 필요하므로 Phase 3 작업.
+ *  - 현재 룰 엔진은 dayOfWeek + startTime~endTime + effectiveFrom/To 만 평가.
+ *  - condition 가진 룰도 시간 조건만 맞으면 발행됨 → 운영 활성화 전 주의.
+ *
+ * 운영 안전 모드:
+ *  - AUX_RULE_ENGINE_ENABLED=false (기본): Cron 실행 안 함
+ *  - AUX_RULE_ENGINE_MODE=DRY_RUN       : 평가만 하고 INSERT 안 함 (시뮬레이션 로그)
+ *  - AUX_RULE_ENGINE_MODE=LIVE          : 실제 INSERT (기본)
+ */
 @Injectable()
 export class RuleEngineService {
   private readonly logger = new Logger(RuleEngineService.name);
   private readonly enabled: boolean;
+  private readonly dryRun: boolean;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {
     this.enabled = this.config.get<string>('AUX_RULE_ENGINE_ENABLED') === 'true';
-    this.logger.log(`🔧 RuleEngineService init — enabled=${this.enabled}`);
+    this.dryRun  = this.config.get<string>('AUX_RULE_ENGINE_MODE') === 'DRY_RUN';
+    const mode = this.dryRun ? 'DRY_RUN (no INSERT)' : 'LIVE';
+    this.logger.log(`🔧 RuleEngineService init — enabled=${this.enabled} mode=${mode}`);
+    this.logger.log('⚠️  Phase 2 PoC: condition JSONB 평가는 미구현 (occupancy/oaTempLt 등 외부 신호 미연동)');
   }
 
   @Cron(CronExpression.EVERY_MINUTE, { name: 'aux-rule-engine' })
@@ -76,12 +92,17 @@ export class RuleEngineService {
 
   private async evaluateAndIssue(): Promise<number> {
     const match = this.timeMatchSql();
+    // DRY_RUN: result='PENDING' + triggeredBy='rule-engine-dryrun' (감사 추적용 — 외부 송신 X)
+    //   PENDING은 CHECK 제약에 포함된 합법 값. triggeredBy로 dryrun 식별.
+    // LIVE   : result='SUCCESS' + triggeredBy='rule-engine' (정상 발행)
+    const resultCol  = this.dryRun ? Prisma.sql`'PENDING'`            : Prisma.sql`'SUCCESS'`;
+    const triggerCol = this.dryRun ? Prisma.sql`'rule-engine-dryrun'` : Prisma.sql`'rule-engine'`;
 
     // 1) FACILITY 대상 룰 → 단일 facility 발행
     const facilityCount = await this.prisma.$executeRaw`
       INSERT INTO fems.control_commands
         ("ruleId", "facilityId", command, "commandValue", source, "triggeredBy", result, "executedAt")
-      SELECT r.id, r."targetId", r.action, r."actionValue", 'SCHEDULE', 'rule-engine', 'SUCCESS', NOW()
+      SELECT r.id, r."targetId", r.action, r."actionValue", 'SCHEDULE', ${triggerCol}, ${resultCol}, NOW()
         FROM fems.schedule_rules r
        WHERE r.enabled = true
          AND r."targetScope" = 'FACILITY'
@@ -99,7 +120,7 @@ export class RuleEngineService {
     const zoneCount = await this.prisma.$executeRaw`
       INSERT INTO fems.control_commands
         ("ruleId", "facilityId", command, "commandValue", source, "triggeredBy", result, "executedAt")
-      SELECT r.id, f.id, r.action, r."actionValue", 'SCHEDULE', 'rule-engine', 'SUCCESS', NOW()
+      SELECT r.id, f.id, r.action, r."actionValue", 'SCHEDULE', ${triggerCol}, ${resultCol}, NOW()
         FROM fems.schedule_rules r
         JOIN public.facilities f
           ON f."zoneId" = r."targetId"
