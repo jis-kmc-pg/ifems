@@ -283,4 +283,35 @@ export class AuxService {
        LIMIT ${limit}
     `;
   }
+
+  // ──────────────────────────────────────────────
+  // trend (시간별 누적 전력 — HVAC / LIGHTING)
+  //   CUMULATIVE POWER tag의 1시간 차분(LAST-FIRST) 합산
+  // ──────────────────────────────────────────────
+  async getTypeTrend(
+    type: 'HVAC' | 'LIGHTING',
+    hours = 24,
+  ): Promise<Array<{ time: string; kwh: number; bucket: string }>> {
+    const safeHours = Math.max(1, Math.min(hours, 168)); // 1h ~ 7d
+    return this.prisma.$queryRaw<Array<{ time: string; kwh: number; bucket: string }>>`
+      WITH usage_per_hour AS (
+        SELECT date_trunc('hour', r.timestamp) AS bucket,
+               t.id AS tag_id,
+               MAX(r.value) - MIN(r.value) AS diff
+          FROM public.tag_data_raw r
+          JOIN public.tags t       ON t.id = r."tagId"
+          JOIN public.facilities f ON f.id = t."facilityId"
+         WHERE f.type = ${type}
+           AND t."tagName" LIKE '%_POWER'
+           AND r.timestamp >= NOW() - (${safeHours} || ' hours')::interval
+         GROUP BY bucket, t.id
+      )
+      SELECT to_char(bucket, 'HH24:MI')     AS time,
+             SUM(GREATEST(diff, 0))::float  AS kwh,
+             bucket::text                    AS bucket
+        FROM usage_per_hour
+       GROUP BY bucket
+       ORDER BY bucket
+    `;
+  }
 }

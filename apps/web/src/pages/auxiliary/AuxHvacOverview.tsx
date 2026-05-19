@@ -3,9 +3,17 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertCircle } from 'lucide-react';
 import PageHeader from '../../components/layout/PageHeader';
 import KpiCard from '../../components/ui/KpiCard';
-import { getZones, ZONE_TYPE_LABEL, type Zone } from '../../services/auxiliary';
+import TrendChart, { type TrendSeries } from '../../components/charts/TrendChart';
+import { getZones, getHvacTrend, ZONE_TYPE_LABEL, type Zone } from '../../services/auxiliary';
+
+const HVAC_TREND_SERIES: TrendSeries[] = [
+  { key: 'kwh', label: '공조 사용량 (kWh)', color: '#3B82F6', type: 'area', fillOpacity: 0.35 },
+];
 
 const HVAC_ZONE_TYPES = ['PRODUCTION', 'OFFICE', 'CORRIDOR', 'LOUNGE'] as const;
+
+// 'HH:mm' (현재 시각) — 빨간 수직선
+const currentTime = new Date().toTimeString().slice(0, 5);
 
 function ZoneCard({ zone }: { zone: Zone }) {
   const hvac = zone.hvacCount ?? 0;
@@ -60,6 +68,11 @@ export default function AuxHvacOverview() {
     queryFn: () => getZones(false),
   });
 
+  const { data: trendData = [], isLoading: trendLoading } = useQuery({
+    queryKey: ['aux', 'hvac-trend', 24],
+    queryFn: () => getHvacTrend(24),
+  });
+
   const hvacZones = useMemo(
     () => zones.filter(z => HVAC_ZONE_TYPES.includes(z.zoneType as typeof HVAC_ZONE_TYPES[number])),
     [zones],
@@ -99,6 +112,30 @@ export default function AuxHvacOverview() {
         <KpiCard label="등록 공조기" value={totalHvac} unit="대" />
         <KpiCard label="총 냉방 능력" value={totalCapacityRt.toLocaleString()} unit="RT" />
         <KpiCard label="24h 사용량" value={totalKwh24h.toFixed(0)} unit="kWh" />
+      </div>
+
+      {/* 24h 트렌드 차트 */}
+      <div className="bg-white dark:bg-[#16213E] border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">시간별 공조 사용량 (최근 24시간)</h2>
+          <span className="text-xs text-gray-500">1시간 버킷 · {trendData.length}개 포인트</span>
+        </div>
+        {trendLoading ? (
+          <div className="h-[240px] flex items-center justify-center text-gray-400 text-sm">트렌드 불러오는 중...</div>
+        ) : trendData.length === 0 ? (
+          <div className="h-[240px] flex items-center justify-center text-gray-400 text-sm">시계열 데이터 없음</div>
+        ) : (
+          <div className="h-[240px]">
+            <TrendChart
+              data={trendData}
+              series={HVAC_TREND_SERIES}
+              xKey="time"
+              yLabel="kWh"
+              currentTime={currentTime}
+              height={240}
+            />
+          </div>
+        )}
       </div>
 
       {/* 데이터 수집 안내 */}

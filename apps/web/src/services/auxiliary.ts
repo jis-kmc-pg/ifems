@@ -193,3 +193,18 @@ export const deleteScheduleRule = (id: string) =>
 // ──────────────────────────────────────────────
 export const getControlCommands = (params?: { limit?: number; facilityId?: string }) =>
   fetchApi<ControlCommand[]>([], '/aux/control-commands', params as Record<string, unknown>);
+
+// ──────────────────────────────────────────────
+// trend (시간별 누적 사용량 — HVAC / LIGHTING)
+// ──────────────────────────────────────────────
+export interface TrendPoint {
+  time: string;     // 'HH:mm'
+  kwh: number;      // 1h 누적 사용량
+  bucket: string;   // ISO timestamp (시간순 정렬용)
+}
+
+export const getHvacTrend = (hours = 24) =>
+  fetchApi<TrendPoint[]>([], '/aux/hvac/trend', { hours });
+
+export const getLightingTrend = (hours = 24) =>
+  fetchApi<TrendPoint[]>([], '/aux/lighting/trend', { hours });

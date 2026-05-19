@@ -3,10 +3,17 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertCircle } from 'lucide-react';
 import PageHeader from '../../components/layout/PageHeader';
 import KpiCard from '../../components/ui/KpiCard';
+import TrendChart, { type TrendSeries } from '../../components/charts/TrendChart';
 import {
-  getZones, getLuxStandards,
+  getZones, getLuxStandards, getLightingTrend,
   ZONE_TYPE_LABEL, type Zone, type LuxStandard,
 } from '../../services/auxiliary';
+
+const LGT_TREND_SERIES: TrendSeries[] = [
+  { key: 'kwh', label: '조명 사용량 (kWh)', color: '#F39C12', type: 'area', fillOpacity: 0.35 },
+];
+
+const currentTime = new Date().toTimeString().slice(0, 5);
 
 function zoneTypeToLuxKey(zoneType: string): string {
   const map: Record<string, string> = {
@@ -89,6 +96,11 @@ export default function AuxLightingOverview() {
     queryFn: getLuxStandards,
   });
 
+  const { data: trendData = [], isLoading: tLoading } = useQuery({
+    queryKey: ['aux', 'lighting-trend', 24],
+    queryFn: () => getLightingTrend(24),
+  });
+
   const luxByZoneType = useMemo(() => {
     const m = new Map<string, LuxStandard>();
     lux.forEach(s => m.set(s.zoneType, s));
@@ -135,6 +147,30 @@ export default function AuxLightingOverview() {
         <KpiCard label="등록 회로 수" value={totalCircuits} unit="회로" />
         <KpiCard label="총 정격 전력" value={totalRatedKw.toFixed(1)} unit="kW" />
         <KpiCard label="24h 사용량" value={totalKwh24h.toFixed(0)} unit="kWh" />
+      </div>
+
+      {/* 24h 트렌드 차트 */}
+      <div className="bg-white dark:bg-[#16213E] border border-gray-200 dark:border-gray-700 rounded-lg p-4 mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-white">시간별 조명 사용량 (최근 24시간)</h2>
+          <span className="text-xs text-gray-500">1시간 버킷 · {trendData.length}개 포인트</span>
+        </div>
+        {tLoading ? (
+          <div className="h-[240px] flex items-center justify-center text-gray-400 text-sm">트렌드 불러오는 중...</div>
+        ) : trendData.length === 0 ? (
+          <div className="h-[240px] flex items-center justify-center text-gray-400 text-sm">시계열 데이터 없음</div>
+        ) : (
+          <div className="h-[240px]">
+            <TrendChart
+              data={trendData}
+              series={LGT_TREND_SERIES}
+              xKey="time"
+              yLabel="kWh"
+              currentTime={currentTime}
+              height={240}
+            />
+          </div>
+        )}
       </div>
 
       {/* 데이터 수집 안내 */}

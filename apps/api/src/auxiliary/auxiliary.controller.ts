@@ -116,4 +116,19 @@ export class AuxController {
     const n = limit ? Math.min(parseInt(limit, 10) || 100, 1000) : 100;
     return this.aux.listControlCommands(n, facilityId);
   }
+
+  // ──────────── trend (시간별 누적 사용량) ────────────
+  @Get('hvac/trend')
+  @ApiOperation({ summary: 'HVAC 시간별 누적 사용량 (1h 버킷)' })
+  @ApiQuery({ name: 'hours', required: false, type: Number, description: '기본 24, 최대 168' })
+  hvacTrend(@Query('hours') hours?: string) {
+    return this.aux.getTypeTrend('HVAC', hours ? parseInt(hours, 10) : 24);
+  }
+
+  @Get('lighting/trend')
+  @ApiOperation({ summary: 'LIGHTING 시간별 누적 사용량 (1h 버킷)' })
+  @ApiQuery({ name: 'hours', required: false, type: Number, description: '기본 24, 최대 168' })
+  lightingTrend(@Query('hours') hours?: string) {
+    return this.aux.getTypeTrend('LIGHTING', hours ? parseInt(hours, 10) : 24);
+  }
 }
