@@ -40,6 +40,11 @@ export interface Zone {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  // facilities 통계 (listZones 응답에만 포함)
+  hvacCount?: number;
+  lightingCount?: number;
+  totalRatedW?: number;
+  totalCapacityRt?: number;
 }
 
 export interface ZoneTreeNode extends Zone {

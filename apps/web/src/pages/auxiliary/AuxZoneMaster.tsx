@@ -75,11 +75,11 @@ export default function AuxZoneMaster() {
   });
 
   const columns: Column<Zone>[] = [
-    { key: 'code', label: '肄붾뱶', sortable: true },
-    { key: 'name', label: '?대쫫', sortable: true },
+    { key: 'code', label: '코드', sortable: true },
+    { key: 'name', label: '이름', sortable: true },
     {
       key: 'zoneType',
-      label: '?좏삎',
+      label: '유형',
       sortable: true,
       render: (_v, row) => (
         <span className="px-2 py-0.5 text-xs rounded bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200">
@@ -89,31 +89,41 @@ export default function AuxZoneMaster() {
     },
     {
       key: 'parentId',
-      label: '?곸쐞',
+      label: '상위',
       render: (_v, row) => {
-        if (!row.parentId) return <span className="text-gray-400">??/span>;
+        if (!row.parentId) return <span className="text-gray-400">—</span>;
         const parent = zones.find(z => z.id === row.parentId);
         return <span className="text-xs">{parent?.code ?? row.parentId.slice(0, 8)}</span>;
       },
     },
     {
       key: 'areaSqm',
-      label: '硫댁쟻(??',
+      label: '면적(㎡)',
       sortable: true,
-      render: (_v, row) => row.areaSqm != null ? row.areaSqm.toLocaleString() : <span className="text-gray-400">??/span>,
+      render: (_v, row) => row.areaSqm != null ? row.areaSqm.toLocaleString() : <span className="text-gray-400">—</span>,
+    },
+    {
+      key: 'hvacCount',
+      label: '공조/조명',
+      render: (_v, row) => (
+        <div className="flex gap-1 text-xs">
+          <span className="px-1.5 py-0.5 rounded bg-[#3B82F6]/10 text-[#3B82F6]">H {row.hvacCount ?? 0}</span>
+          <span className="px-1.5 py-0.5 rounded bg-[#F39C12]/10 text-[#F39C12]">L {row.lightingCount ?? 0}</span>
+        </div>
+      ),
     },
     {
       key: 'isActive',
-      label: '?곹깭',
+      label: '상태',
       render: (_v, row) => (
         <span className={row.isActive ? 'text-[#27AE60]' : 'text-gray-400'}>
-          {row.isActive ? '?쒖꽦' : '鍮꾪솢??}
+          {row.isActive ? '활성' : '비활성'}
         </span>
       ),
     },
     {
       key: 'actions',
-      label: '?묒뾽',
+      label: '작업',
       render: (_v, row) => (
         <div className="flex gap-2">
           <button onClick={() => onEdit(row)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
@@ -153,7 +163,7 @@ export default function AuxZoneMaster() {
 
   const onSave = () => {
     if (!form.code.trim() || !form.name.trim()) {
-      alert('肄붾뱶? ?대쫫???낅젰?섏꽭??');
+      alert('코드와 이름을 입력하세요.');
       return;
     }
     const areaSqm = form.areaSqm.trim() ? Number(form.areaSqm) : undefined;
@@ -183,21 +193,21 @@ export default function AuxZoneMaster() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="怨듦컙 留덉뒪??(Zones)"
-        description="i-FEMS 遺??ㅻ퉬??怨듦컙 ?⑥쐞 (怨듭옣 > ??> 痢?> 議?. bems ?ㅽ궎留? fems.zones"
-        breadcrumbs={[{ label: '遺??ㅻ퉬' }, { label: '?ㅼ젙' }, { label: '怨듦컙 留덉뒪?? }]}
+        title="공간 마스터 (Zones)"
+        description="i-FEMS 부대설비의 공간 단위 (공장 > 동 > 층 > 존). fems 스키마: fems.zones"
+        breadcrumbs={[{ label: '부대설비' }, { label: '설정' }, { label: '공간 마스터' }]}
         actions={
           <button
             onClick={onAdd}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-[#E94560] text-white text-sm rounded hover:bg-[#d63854] transition-colors"
           >
-            <Plus size={16} /> Zone 異붽?
+            <Plus size={16} /> Zone 추가
           </button>
         }
       />
 
       {isLoading ? (
-        <div className="flex-1 flex items-center justify-center text-gray-400">遺덈윭?ㅻ뒗 以?..</div>
+        <div className="flex-1 flex items-center justify-center text-gray-400">불러오는 중...</div>
       ) : (
         <SortableTable data={zones} columns={columns} pageSize={20} />
       )}
@@ -206,12 +216,12 @@ export default function AuxZoneMaster() {
       <Modal
         isOpen={modal.isOpen.edit}
         onClose={() => modal.close('edit')}
-        title={selected ? `Zone ?섏젙: ${selected.code}` : 'Zone 異붽?'}
+        title={selected ? `Zone 수정: ${selected.code}` : 'Zone 추가'}
         size="md"
       >
         <div className="space-y-3">
           <div>
-            <label className="block text-xs text-gray-500 mb-1">肄붾뱶 *</label>
+            <label className="block text-xs text-gray-500 mb-1">코드 *</label>
             <input
               type="text"
               value={form.code}
@@ -222,17 +232,17 @@ export default function AuxZoneMaster() {
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">?대쫫 *</label>
+            <label className="block text-xs text-gray-500 mb-1">이름 *</label>
             <input
               type="text"
               value={form.name}
               onChange={e => setForm(s => ({ ...s, name: e.target.value }))}
               className="w-full px-3 py-2 border rounded text-sm bg-white dark:bg-gray-800 dark:border-gray-600"
-              placeholder="5踰??쇱씤 ?묒뾽??
+              placeholder="5번 라인 작업장"
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">?좏삎 *</label>
+            <label className="block text-xs text-gray-500 mb-1">유형 *</label>
             <select
               value={form.zoneType}
               onChange={e => setForm(s => ({ ...s, zoneType: e.target.value as ZoneType }))}
@@ -244,7 +254,7 @@ export default function AuxZoneMaster() {
             </select>
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">硫댁쟻(??</label>
+            <label className="block text-xs text-gray-500 mb-1">면적(㎡)</label>
             <input
               type="number"
               value={form.areaSqm}
@@ -255,15 +265,15 @@ export default function AuxZoneMaster() {
             />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 mb-1">?곸쐞 Zone</label>
+            <label className="block text-xs text-gray-500 mb-1">상위 Zone</label>
             <select
               value={form.parentCode}
               onChange={e => setForm(s => ({ ...s, parentCode: e.target.value }))}
               className="w-full px-3 py-2 border rounded text-sm bg-white dark:bg-gray-800 dark:border-gray-600"
             >
-              <option value="">(?놁쓬)</option>
+              <option value="">(없음)</option>
               {parentOptions.map(p => (
-                <option key={p.id} value={p.code}>{p.code} ??{p.name}</option>
+                <option key={p.id} value={p.code}>{p.code} — {p.name}</option>
               ))}
             </select>
           </div>
@@ -272,14 +282,14 @@ export default function AuxZoneMaster() {
               onClick={() => modal.close('edit')}
               className="px-3 py-1.5 border rounded text-sm dark:border-gray-600 dark:text-gray-200"
             >
-              痍⑥냼
+              취소
             </button>
             <button
               onClick={onSave}
               disabled={createMut.isPending || updateMut.isPending}
               className="px-3 py-1.5 bg-[#E94560] text-white rounded text-sm hover:bg-[#d63854] disabled:opacity-50"
             >
-              {selected ? '?섏젙' : '異붽?'}
+              {selected ? '수정' : '추가'}
             </button>
           </div>
         </div>
@@ -289,9 +299,9 @@ export default function AuxZoneMaster() {
         isOpen={modal.isOpen.delete}
         onClose={() => modal.close('delete')}
         onConfirm={() => selected && deleteMut.mutate(selected.id)}
-        title="Zone ??젣"
-        message={selected ? `'${selected.code} ??${selected.name}' ????젣?좉퉴?? 留ㅽ븨???ㅻ퉬??zoneId??NULL濡??댁젣?⑸땲??` : ''}
-        confirmText="??젣"
+        title="Zone 삭제"
+        message={selected ? `'${selected.code} — ${selected.name}' 을 삭제할까요? 매핑된 설비의 zoneId는 NULL로 해제됩니다.` : ''}
+        confirmText="삭제"
         confirmVariant="danger"
       />
     </div>

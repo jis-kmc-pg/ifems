@@ -25,7 +25,7 @@ export default function AuxControlHistory() {
   const columns: Column<ControlCommand>[] = [
     {
       key: 'executedAt',
-      label: '?ㅽ뻾 ?쒓컖',
+      label: '실행 시각',
       sortable: true,
       render: (_v, row) => (
         <span className="font-mono text-xs">
@@ -35,17 +35,17 @@ export default function AuxControlHistory() {
     },
     {
       key: 'facilityId',
-      label: '?ㅻ퉬',
+      label: '설비',
       render: (_v, row) => <span className="font-mono text-xs">{row.facilityId.slice(0, 8)}</span>,
     },
     {
       key: 'command',
-      label: '紐낅졊',
+      label: '명령',
       render: (_v, row) => <span className="font-mono text-xs">{row.command}</span>,
     },
     {
       key: 'source',
-      label: '異쒖쿂',
+      label: '출처',
       render: (_v, row) => (
         <span className={`px-2 py-0.5 text-xs rounded ${SOURCE_BADGE[row.source] ?? ''}`}>
           {row.source}
@@ -54,12 +54,12 @@ export default function AuxControlHistory() {
     },
     {
       key: 'triggeredBy',
-      label: '?몃━嫄?,
+      label: '트리거',
       render: (_v, row) => <span className="text-xs">{row.triggeredBy}</span>,
     },
     {
       key: 'result',
-      label: '寃곌낵',
+      label: '결과',
       render: (_v, row) => (
         <span className={`px-2 py-0.5 text-xs rounded ${RESULT_BADGE[row.result] ?? ''}`}>
           {row.result}
@@ -68,26 +68,26 @@ export default function AuxControlHistory() {
     },
     {
       key: 'errorMessage',
-      label: '?ㅻ쪟',
+      label: '오류',
       render: (_v, row) => row.errorMessage
         ? <span className="text-xs text-[#E74C3C]">{row.errorMessage}</span>
-        : <span className="text-gray-400">??/span>,
+        : <span className="text-gray-400">—</span>,
     },
   ];
 
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="?쒖뼱 紐낅졊 ?대젰"
-        description="怨듭“/議곕챸 ?먮룞쨌?섎룞 ?쒖뼱 紐낅졊 媛먯궗 ?대젰 (fems.control_commands)"
-        breadcrumbs={[{ label: '遺??ㅻ퉬' }, { label: '?쒖뼱 紐낅졊 ?대젰' }]}
+        title="제어 명령 이력"
+        description="공조/조명 자동·수동 제어 명령 감사 이력 (fems.control_commands)"
+        breadcrumbs={[{ label: '부대설비' }, { label: '제어 명령 이력' }]}
       />
 
       {isLoading ? (
-        <div className="flex-1 flex items-center justify-center text-gray-400">遺덈윭?ㅻ뒗 以?..</div>
+        <div className="flex-1 flex items-center justify-center text-gray-400">불러오는 중...</div>
       ) : data.length === 0 ? (
         <div className="flex-1 flex items-center justify-center text-gray-400">
-          ?꾩쭅 ?ㅽ뻾???쒖뼱 紐낅졊???놁뒿?덈떎.
+          아직 실행된 제어 명령이 없습니다.
         </div>
       ) : (
         <SortableTable data={data} columns={columns} pageSize={30} />

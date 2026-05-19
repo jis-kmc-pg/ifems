@@ -61,7 +61,7 @@ const SET012TagMaster = lazy(() => import('./pages/settings/SET012TagMaster'));
 const SET013TagHierarchy = lazy(() => import('./pages/settings/SET013TagHierarchy'));
 const SET014EnergySourceConfig = lazy(() => import('./pages/settings/SET014EnergySourceConfig'));
 const SET015SystemSettings = lazy(() => import('./pages/settings/SET015SystemSettings'));
-// Aux (遺??ㅻ퉬: 怨듭“/議곕챸/?섍꼍)
+// Aux (부대설비: 공조/조명/환경)
 const AuxHvacOverview     = lazy(() => import('./pages/auxiliary/AuxHvacOverview'));
 const AuxLightingOverview = lazy(() => import('./pages/auxiliary/AuxLightingOverview'));
 const AuxZoneMaster       = lazy(() => import('./pages/auxiliary/AuxZoneMaster'));

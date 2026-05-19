@@ -10,13 +10,13 @@ import {
   type ScheduleRule,
 } from '../../services/auxiliary';
 
-const DOW_LABEL = ['??,'??,'??,'??,'紐?,'湲?,'??] as const;
+const DOW_LABEL = ['일','월','화','수','목','금','토'] as const;
 
 function formatDow(dow: number[]) {
-  if (dow.length === 0) return '??;
-  if (dow.length === 7) return '留ㅼ씪';
-  if (dow.length === 5 && [1,2,3,4,5].every(d => dow.includes(d))) return '?됱씪';
-  if (dow.length === 2 && dow.includes(0) && dow.includes(6)) return '二쇰쭚';
+  if (dow.length === 0) return '—';
+  if (dow.length === 7) return '매일';
+  if (dow.length === 5 && [1,2,3,4,5].every(d => dow.includes(d))) return '평일';
+  if (dow.length === 2 && dow.includes(0) && dow.includes(6)) return '주말';
   return dow.slice().sort().map(d => DOW_LABEL[d]).join(',');
 }
 
@@ -58,10 +58,10 @@ export default function AuxScheduleRules() {
   });
 
   const columns: Column<ScheduleRule>[] = [
-    { key: 'name', label: '猷곕챸', sortable: true },
+    { key: 'name', label: '룰명', sortable: true },
     {
       key: 'targetType',
-      label: '???,
+      label: '대상',
       sortable: true,
       render: (_v, row) => (
         <span className={`px-2 py-0.5 text-xs rounded ${TARGET_BADGE[row.targetType] ?? ''}`}>
@@ -71,27 +71,27 @@ export default function AuxScheduleRules() {
     },
     {
       key: 'targetScope',
-      label: '踰붿쐞',
+      label: '범위',
       render: (_v, row) => <span className="text-xs">{row.targetScope}</span>,
     },
     {
       key: 'dayOfWeek',
-      label: '?붿씪',
+      label: '요일',
       render: (_v, row) => <span className="text-xs font-mono">{formatDow(row.dayOfWeek)}</span>,
     },
     {
       key: 'startTime',
-      label: '?쒓컙?',
+      label: '시간대',
       render: (_v, row) =>
         row.startTime || row.endTime ? (
           <span className="font-mono text-xs">{row.startTime ?? '--:--'} ~ {row.endTime ?? '--:--'}</span>
         ) : (
-          <span className="text-gray-400">?꾩씪</span>
+          <span className="text-gray-400">전일</span>
         ),
     },
     {
       key: 'action',
-      label: '?숈옉',
+      label: '동작',
       render: (_v, row) => (
         <span className={`px-2 py-0.5 text-xs rounded ${ACTION_BADGE[row.action] ?? ''}`}>
           {row.action}
@@ -100,13 +100,13 @@ export default function AuxScheduleRules() {
     },
     {
       key: 'priority',
-      label: '?곗꽑?쒖쐞',
+      label: '우선순위',
       sortable: true,
       render: (_v, row) => <span className="text-xs font-mono">{row.priority}</span>,
     },
     {
       key: 'enabled',
-      label: '?곹깭',
+      label: '상태',
       render: (_v, row) => (
         <button
           onClick={() => toggleMut.mutate({ id: row.id, enabled: !row.enabled })}
@@ -123,7 +123,7 @@ export default function AuxScheduleRules() {
     },
     {
       key: 'actions',
-      label: '?묒뾽',
+      label: '작업',
       render: (_v, row) => (
         <button
           onClick={() => { setSelected(row); modal.open('delete'); }}
@@ -138,13 +138,13 @@ export default function AuxScheduleRules() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="?댁쟾 ?ㅼ?以?猷?
-        description="怨듭“/議곕챸 ?먮룞 ON쨌OFF쨌SETPOINT 猷??붿쭊 (fems.schedule_rules)"
-        breadcrumbs={[{ label: '遺??ㅻ퉬' }, { label: '?ㅼ젙' }, { label: '?ㅼ?以?猷? }]}
+        title="운전 스케줄 룰"
+        description="공조/조명 자동 ON·OFF·SETPOINT 룰 엔진 (fems.schedule_rules)"
+        breadcrumbs={[{ label: '부대설비' }, { label: '설정' }, { label: '스케줄 룰' }]}
       />
 
       {isLoading ? (
-        <div className="flex-1 flex items-center justify-center text-gray-400">遺덈윭?ㅻ뒗 以?..</div>
+        <div className="flex-1 flex items-center justify-center text-gray-400">불러오는 중...</div>
       ) : (
         <SortableTable data={data} columns={columns} pageSize={20} />
       )}
@@ -153,9 +153,9 @@ export default function AuxScheduleRules() {
         isOpen={modal.isOpen.delete}
         onClose={() => modal.close('delete')}
         onConfirm={() => selected && deleteMut.mutate(selected.id)}
-        title="?ㅼ?以?猷???젣"
-        message={selected ? `'${selected.name}' 猷곗쓣 ??젣?좉퉴??` : ''}
-        confirmText="??젣"
+        title="스케줄 룰 삭제"
+        message={selected ? `'${selected.name}' 룰을 삭제할까요?` : ''}
+        confirmText="삭제"
         confirmVariant="danger"
       />
     </div>

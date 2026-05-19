@@ -25,12 +25,27 @@ export class AuxService {
   // ──────────────────────────────────────────────
 
   async listZones(activeOnly = true): Promise<ZoneDto[]> {
+    // facilities 통계(HVAC/LIGHTING 카운트, 정격W 합) 를 LEFT JOIN 으로 함께 반환
     return this.prisma.$queryRaw<ZoneDto[]>`
-      SELECT id, code, name, "parentId", "factoryId", "areaSqm",
-             "zoneType", metadata, "isActive", "createdAt", "updatedAt"
-        FROM fems.zones
-       WHERE (${!activeOnly}::boolean OR "isActive" = true)
-       ORDER BY code
+      SELECT z.id, z.code, z.name, z."parentId", z."factoryId", z."areaSqm",
+             z."zoneType", z.metadata, z."isActive", z."createdAt", z."updatedAt",
+             COALESCE(s.hvac_count,     0)::int    AS "hvacCount",
+             COALESCE(s.lighting_count, 0)::int    AS "lightingCount",
+             COALESCE(s.total_rated_w,  0)::float  AS "totalRatedW",
+             COALESCE(s.total_capacity_rt, 0)::float AS "totalCapacityRt"
+        FROM fems.zones z
+        LEFT JOIN (
+          SELECT f."zoneId",
+                 count(*) FILTER (WHERE f.type='HVAC')     AS hvac_count,
+                 count(*) FILTER (WHERE f.type='LIGHTING') AS lighting_count,
+                 SUM(COALESCE((f.metadata->>'ratedW')::float, 0))     AS total_rated_w,
+                 SUM(COALESCE((f.metadata->>'capacityRT')::float, 0)) AS total_capacity_rt
+            FROM public.facilities f
+           WHERE f.type IN ('HVAC','LIGHTING')
+           GROUP BY f."zoneId"
+        ) s ON s."zoneId" = z.id
+       WHERE (${!activeOnly}::boolean OR z."isActive" = true)
+       ORDER BY z.code
     `;
   }
 

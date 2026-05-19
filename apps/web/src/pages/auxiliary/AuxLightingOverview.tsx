@@ -9,20 +9,26 @@ import {
 } from '../../services/auxiliary';
 
 function zoneTypeToLuxKey(zoneType: string): string {
-  // backend zoneType(?곷Ц) ??lux_standards.zoneType(?쒓?) 留ㅽ븨
   const map: Record<string, string> = {
-    PRODUCTION: '?쇰컲媛怨?,
-    OFFICE: '?щТ',
-    CORRIDOR: '蹂듬룄',
-    WAREHOUSE: '李쎄퀬',
-    PARKING: '二쇱감??,
-    LOUNGE: '?닿쾶??,
-    UTILITY: '?좏떥由ы떚',
+    PRODUCTION: '일반가공',
+    OFFICE: '사무',
+    CORRIDOR: '복도',
+    WAREHOUSE: '창고',
+    PARKING: '주차장',
+    LOUNGE: '휴게실',
+    UTILITY: '유틸리티',
   };
   return map[zoneType] ?? '';
 }
 
 function ZoneCard({ zone, requiredLux }: { zone: Zone; requiredLux?: number }) {
+  const lightingCount = zone.lightingCount ?? 0;
+  const ratedW = zone.totalRatedW ?? 0;
+  const lpd = zone.areaSqm && zone.areaSqm > 0 && ratedW > 0
+    ? ratedW / zone.areaSqm
+    : null;
+  const lpdOver = lpd != null && lpd > 12; // LEED/G-SEED 기준 12 W/㎡
+
   return (
     <div className="bg-white dark:bg-[#16213E] border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between mb-2">
@@ -35,25 +41,38 @@ function ZoneCard({ zone, requiredLux }: { zone: Zone; requiredLux?: number }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
+      <div className="grid grid-cols-4 gap-2 mt-3 text-xs">
         <div>
-          <div className="text-gray-400">硫댁쟻</div>
+          <div className="text-gray-400">면적</div>
           <div className="font-mono text-gray-700 dark:text-gray-200">
-            {zone.areaSqm != null ? `${zone.areaSqm.toLocaleString()}?? : '??}
+            {zone.areaSqm != null ? `${zone.areaSqm.toLocaleString()}㎡` : '—'}
           </div>
         </div>
         <div>
-          <div className="text-gray-400">湲곗? lux</div>
-          <div className="font-mono font-semibold text-[#F39C12]">
-            {requiredLux ? `${requiredLux}` : '??}
+          <div className="text-gray-400">회로</div>
+          <div className={`font-mono font-semibold ${lightingCount > 0 ? 'text-[#F39C12]' : 'text-gray-400'}`}>
+            {lightingCount > 0 ? `${lightingCount}` : '미등록'}
           </div>
         </div>
         <div>
-          <div className="text-gray-400">?꾩옱 ?먮벑</div>
-          <div className="flex items-center gap-1 text-gray-400">
-            <span className="w-2 h-2 rounded-full bg-gray-400" />
-            ?湲?          </div>
+          <div className="text-gray-400">정격 W</div>
+          <div className="font-mono text-gray-700 dark:text-gray-200">
+            {ratedW > 0 ? ratedW.toLocaleString() : '—'}
+          </div>
         </div>
+        <div>
+          <div className="text-gray-400">LPD(W/㎡)</div>
+          <div className={`font-mono font-semibold ${lpdOver ? 'text-[#E74C3C]' : lpd != null ? 'text-[#27AE60]' : 'text-gray-400'}`}>
+            {lpd != null ? lpd.toFixed(1) : '—'}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between text-[11px]">
+        <span className="text-gray-400">KS A 3011 기준</span>
+        <span className="font-mono text-[#F39C12]">
+          {requiredLux ? `${requiredLux} lux` : '—'}
+        </span>
       </div>
     </div>
   );
@@ -75,7 +94,7 @@ export default function AuxLightingOverview() {
     return m;
   }, [lux]);
 
-  // ?μ쇅(OUTDOOR) ?쒖쇅 ???ㅻ궡 議곕챸 ??곷쭔
+  // 옥외(OUTDOOR) 제외 — 실내 조명 대상만
   const lightingZones = useMemo(
     () => zones.filter(z => z.zoneType !== 'OUTDOOR'),
     [zones],
@@ -86,37 +105,48 @@ export default function AuxLightingOverview() {
     [lightingZones],
   );
 
+  const totalCircuits = useMemo(
+    () => zones.reduce((sum, z) => sum + (z.lightingCount ?? 0), 0),
+    [zones],
+  );
+
+  const totalRatedKw = useMemo(
+    () => zones.reduce((sum, z) => sum + (z.totalRatedW ?? 0), 0) / 1000,
+    [zones],
+  );
+
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="議곕챸 醫낇빀 ?꾪솴"
-        description="議곕챸(Lighting) ?곸뿭蹂??댁쁺 紐⑤땲?곕쭅 ??KS A 3011 ?묒뾽議곕룄 湲곗? ?곸슜"
-        breadcrumbs={[{ label: '遺??ㅻ퉬' }, { label: '議곕챸' }, { label: '醫낇빀 ?꾪솴' }]}
+        title="조명 종합 현황"
+        description="조명(Lighting) 영역별 운영 모니터링 — KS A 3011 작업조도 기준 적용"
+        breadcrumbs={[{ label: '부대설비' }, { label: '조명' }, { label: '종합 현황' }]}
       />
 
       {/* KPI */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
-        <KpiCard label="議곕챸 ????곸뿭" value={lightingZones.length} unit="媛? />
-        <KpiCard label="議곕챸 硫댁쟻 ?⑷퀎" value={totalArea.toLocaleString()} unit="?? />
-        <KpiCard label="?먮벑 以? value="?? unit="?뚮줈" />
-        <KpiCard label="議곕룄 誘몃떖" value="?? unit="援ъ뿭" />
+        <KpiCard label="조명 대상 영역" value={lightingZones.length} unit="개" />
+        <KpiCard label="조명 면적 합계" value={totalArea.toLocaleString()} unit="㎡" />
+        <KpiCard label="등록 회로 수" value={totalCircuits} unit="회로" />
+        <KpiCard label="총 정격 전력" value={totalRatedKw.toFixed(1)} unit="kW" />
       </div>
 
-      {/* ?곗씠???섏쭛 ?덈궡 */}
+      {/* 데이터 수집 안내 */}
       <div className="bg-[#FDB813]/10 border border-[#FDB813]/30 rounded-lg p-3 mb-4">
         <div className="flex items-start gap-2">
           <AlertCircle size={16} className="text-[#FDB813] mt-0.5 flex-shrink-0" />
           <div className="text-xs text-gray-700 dark:text-gray-200">
-            <strong>議곕챸 ?뚮줈 ?깅줉 ?湲?以?/strong> ???뚮줈蹂?ON/OFF / ?뺢꺽W / 議곕룄?쇱꽌 lux ?쒓렇媛
-            <code className="mx-1 px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-[11px]">tags</code> ???깅줉?섎㈃
-            援ъ뿭蹂??먮벑瑜?/ LPD(W/?? / 議곕룄 而댄뵆?쇱씠?몄뒪瑜??ㅼ떆媛꾩쑝濡??쒖떆?⑸땲??
+            <strong>샘플 조명 회로 {totalCircuits}개 등록 완료</strong> —
+            LPD(W/㎡)는 LEED/G-SEED 기준 12 이하가 권장 (초과 시 빨강).
+            점등 ON/OFF 태그가 <code className="mx-1 px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-[11px]">tag_data_raw</code> 에 수집되면
+            구역별 점등률·조도 컴플라이언스를 실시간 표시합니다.
           </div>
         </div>
       </div>
 
       {/* zones list */}
       {(zLoading || lLoading) ? (
-        <div className="flex-1 flex items-center justify-center text-gray-400">遺덈윭?ㅻ뒗 以?..</div>
+        <div className="flex-1 flex items-center justify-center text-gray-400">불러오는 중...</div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {lightingZones.map(z => (

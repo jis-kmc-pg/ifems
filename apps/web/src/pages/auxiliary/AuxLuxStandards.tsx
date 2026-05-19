@@ -10,10 +10,10 @@ export default function AuxLuxStandards() {
   });
 
   const columns: Column<LuxStandard>[] = [
-    { key: 'zoneType', label: '?곸뿭', sortable: true },
+    { key: 'zoneType', label: '영역', sortable: true },
     {
       key: 'requiredLux',
-      label: '湲곗? 議곕룄 (lux)',
+      label: '기준 조도 (lux)',
       sortable: true,
       render: (_v, row) => (
         <span className="font-mono font-semibold text-[#E94560]">
@@ -21,12 +21,12 @@ export default function AuxLuxStandards() {
         </span>
       ),
     },
-    { key: 'description', label: '?ㅻ챸' },
+    { key: 'description', label: '설명' },
     {
       key: 'reference',
-      label: '異쒖쿂',
+      label: '출처',
       render: (_v, row) => (
-        <span className="text-xs text-gray-500">{row.reference ?? '??}</span>
+        <span className="text-xs text-gray-500">{row.reference ?? '—'}</span>
       ),
     },
   ];
@@ -34,13 +34,13 @@ export default function AuxLuxStandards() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="?묒뾽議곕룄 湲곗?"
-        description="KS A 3011 ?쒓뎅?곗뾽?쒖? 湲곗? (?곸뿭蹂?沅뚯옣 議곕룄)"
-        breadcrumbs={[{ label: '遺??ㅻ퉬' }, { label: '?ㅼ젙' }, { label: '?묒뾽議곕룄 湲곗?' }]}
+        title="작업조도 기준"
+        description="KS A 3011 한국산업표준 기준 (영역별 권장 조도)"
+        breadcrumbs={[{ label: '부대설비' }, { label: '설정' }, { label: '작업조도 기준' }]}
       />
 
       {isLoading ? (
-        <div className="flex-1 flex items-center justify-center text-gray-400">遺덈윭?ㅻ뒗 以?..</div>
+        <div className="flex-1 flex items-center justify-center text-gray-400">불러오는 중...</div>
       ) : (
         <SortableTable data={data} columns={columns} pageSize={20} />
       )}

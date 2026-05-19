@@ -19,6 +19,11 @@ export class ZoneDto {
   @ApiProperty() isActive!: boolean;
   @ApiProperty() createdAt!: Date;
   @ApiProperty() updatedAt!: Date;
+  // facilities 매핑 통계 (listZones 응답에만 포함)
+  @ApiPropertyOptional() hvacCount?: number;
+  @ApiPropertyOptional() lightingCount?: number;
+  @ApiPropertyOptional() totalRatedW?: number;
+  @ApiPropertyOptional() totalCapacityRt?: number;
 }
 
 export class CreateZoneDto {
