@@ -36,7 +36,7 @@ export default function AuxLuxStandards() {
       <PageHeader
         title="작업조도 기준"
         description="KS A 3011 한국산업표준 기준 (영역별 권장 조도)"
-        breadcrumbs={[{ label: '부대설비' }, { label: '설정' }, { label: '작업조도 기준' }]}
+        breadcrumbs={[{ label: '설정' }, { label: '부대설비' }, { label: '작업조도 기준' }]}
       />
 
       {isLoading ? (

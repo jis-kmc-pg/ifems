@@ -10,6 +10,9 @@ import {
 import {
   CreateScheduleRuleDto, UpdateScheduleRuleDto, ScheduleRuleDto,
 } from './dto/schedule-rule.dto';
+import {
+  CreateEnergyFlowDto, UpdateEnergyFlowDto, EnergyFlowDto,
+} from './dto/energy-flow.dto';
 
 /**
  * 부대설비(공조/조명/환경) 도메인 API — i-FEMS fems 스키마 골격
@@ -145,5 +148,37 @@ export class AuxController {
   async runRuleEngineNow() {
     const result = await this.ruleEngine.runOnce();
     return { ...result, message: `${result.issued}개 control_commands 발행됨` };
+  }
+
+  // ──────────── energy flows (5페이지 Integration Flow Chart) ────────────
+  @Get('energy-flows')
+  @ApiOperation({ summary: '에너지 흐름도 매핑 목록' })
+  @ApiQuery({ name: 'all', required: false, type: Boolean })
+  listEnergyFlows(@Query('all') all?: string): Promise<EnergyFlowDto[]> {
+    return this.aux.listEnergyFlows(all !== 'true');
+  }
+
+  @Get('energy-flows/:id')
+  @ApiOperation({ summary: '에너지 흐름 단건 조회' })
+  getEnergyFlow(@Param('id') id: string): Promise<EnergyFlowDto> {
+    return this.aux.getEnergyFlow(id);
+  }
+
+  @Post('energy-flows')
+  @ApiOperation({ summary: '에너지 흐름 매핑 추가' })
+  createEnergyFlow(@Body() dto: CreateEnergyFlowDto): Promise<EnergyFlowDto> {
+    return this.aux.createEnergyFlow(dto);
+  }
+
+  @Patch('energy-flows/:id')
+  @ApiOperation({ summary: '에너지 흐름 매핑 수정' })
+  updateEnergyFlow(@Param('id') id: string, @Body() dto: UpdateEnergyFlowDto): Promise<EnergyFlowDto> {
+    return this.aux.updateEnergyFlow(id, dto);
+  }
+
+  @Delete('energy-flows/:id')
+  @ApiOperation({ summary: '에너지 흐름 매핑 삭제' })
+  deleteEnergyFlow(@Param('id') id: string) {
+    return this.aux.deleteEnergyFlow(id);
   }
 }

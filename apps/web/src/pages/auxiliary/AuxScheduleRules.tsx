@@ -140,7 +140,7 @@ export default function AuxScheduleRules() {
       <PageHeader
         title="운전 스케줄 룰"
         description="공조/조명 자동 ON·OFF·SETPOINT 룰 엔진 (fems.schedule_rules)"
-        breadcrumbs={[{ label: '부대설비' }, { label: '설정' }, { label: '스케줄 룰' }]}
+        breadcrumbs={[{ label: '설정' }, { label: '부대설비' }, { label: '스케줄 룰' }]}
       />
 
       {isLoading ? (

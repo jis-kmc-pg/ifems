@@ -208,3 +208,67 @@ export const getHvacTrend = (hours = 24) =>
 
 export const getLightingTrend = (hours = 24) =>
   fetchApi<TrendPoint[]>([], '/aux/lighting/trend', { hours });
+
+// ──────────────────────────────────────────────
+// energy flows (5페이지 Integration Flow Chart)
+// ──────────────────────────────────────────────
+
+export const SOURCE_TYPES = ['ELECTRICITY','GAS','WATER','AIR'] as const;
+export type SourceType = (typeof SOURCE_TYPES)[number];
+
+export const SOURCE_TYPE_LABEL: Record<SourceType, string> = {
+  ELECTRICITY: 'Electricity',
+  GAS:         'Gas',
+  WATER:       'Water',
+  AIR:         'Air',
+};
+
+export const SOURCE_TYPE_COLOR: Record<SourceType, string> = {
+  ELECTRICITY: '#FDB813',
+  GAS:         '#E94560',
+  WATER:       '#3B82F6',
+  AIR:         '#27AE60',
+};
+
+export interface EnergyFlow {
+  id: string;
+  sourceType: SourceType;
+  targetShop: string;
+  branchLabel: string | null;
+  value: number | null;
+  unit: string | null;
+  color: string | null;
+  order: number;
+  isActive: boolean;
+  description: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateEnergyFlowInput {
+  sourceType: SourceType;
+  targetShop: string;
+  branchLabel?: string;
+  value?: number;
+  unit?: string;
+  color?: string;
+  order?: number;
+  description?: string;
+}
+
+export type UpdateEnergyFlowInput = Partial<
+  Omit<CreateEnergyFlowInput, 'sourceType'> & { isActive: boolean }
+>;
+
+export const getEnergyFlows = (includeInactive = false) =>
+  fetchApi<EnergyFlow[]>([], '/aux/energy-flows', includeInactive ? { all: 'true' } : undefined);
+
+export const createEnergyFlow = (data: CreateEnergyFlowInput) =>
+  postApi<EnergyFlow>({} as EnergyFlow, '/aux/energy-flows', data);
+
+export const updateEnergyFlow = (id: string, data: UpdateEnergyFlowInput) =>
+  patchApi<EnergyFlow>({} as EnergyFlow, `/aux/energy-flows/${id}`, data);
+
+export const deleteEnergyFlow = (id: string) =>
+  deleteApi<{ id: string }>({ id }, `/aux/energy-flows/${id}`);

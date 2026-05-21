@@ -195,7 +195,7 @@ export default function AuxZoneMaster() {
       <PageHeader
         title="공간 마스터 (Zones)"
         description="i-FEMS 부대설비의 공간 단위 (공장 > 동 > 층 > 존). fems 스키마: fems.zones"
-        breadcrumbs={[{ label: '부대설비' }, { label: '설정' }, { label: '공간 마스터' }]}
+        breadcrumbs={[{ label: '설정' }, { label: '부대설비' }, { label: '공간 마스터' }]}
         actions={
           <button
             onClick={onAdd}

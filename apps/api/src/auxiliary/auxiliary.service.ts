@@ -7,6 +7,9 @@ import {
 import {
   CreateScheduleRuleDto, UpdateScheduleRuleDto, ScheduleRuleDto,
 } from './dto/schedule-rule.dto';
+import {
+  CreateEnergyFlowDto, UpdateEnergyFlowDto, EnergyFlowDto,
+} from './dto/energy-flow.dto';
 
 /**
  * 부대설비(공조/조명/환경) 도메인 서비스
@@ -313,5 +316,77 @@ export class AuxService {
        GROUP BY bucket
        ORDER BY bucket
     `;
+  }
+
+  // ──────────────────────────────────────────────
+  // energy_flows (5페이지 — Integration Flow Chart CRUD)
+  // ──────────────────────────────────────────────
+
+  async listEnergyFlows(activeOnly = true): Promise<EnergyFlowDto[]> {
+    return this.prisma.$queryRaw<EnergyFlowDto[]>`
+      SELECT id, "sourceType", "targetShop", "branchLabel", value, unit, color,
+             "order", "isActive", description, "createdBy", "createdAt", "updatedAt"
+        FROM fems.energy_flows
+       WHERE (${!activeOnly}::boolean OR "isActive" = true)
+       ORDER BY "sourceType", "order", "targetShop", "branchLabel" NULLS FIRST
+    `;
+  }
+
+  async getEnergyFlow(id: string): Promise<EnergyFlowDto> {
+    const rows = await this.prisma.$queryRaw<EnergyFlowDto[]>`
+      SELECT id, "sourceType", "targetShop", "branchLabel", value, unit, color,
+             "order", "isActive", description, "createdBy", "createdAt", "updatedAt"
+        FROM fems.energy_flows WHERE id = ${id}
+    `;
+    if (rows.length === 0) throw new NotFoundException(`EnergyFlow not found: ${id}`);
+    return rows[0];
+  }
+
+  async createEnergyFlow(dto: CreateEnergyFlowDto): Promise<EnergyFlowDto> {
+    const rows = await this.prisma.$queryRaw<EnergyFlowDto[]>`
+      INSERT INTO fems.energy_flows
+        ("sourceType","targetShop","branchLabel",value,unit,color,"order",description,"createdBy")
+      VALUES (
+        ${dto.sourceType},
+        ${dto.targetShop},
+        ${dto.branchLabel ?? null},
+        ${dto.value ?? null},
+        ${dto.unit ?? null},
+        ${dto.color ?? null},
+        ${dto.order ?? 0},
+        ${dto.description ?? null},
+        ${'web-ui'}
+      )
+      RETURNING id, "sourceType", "targetShop", "branchLabel", value, unit, color,
+                "order", "isActive", description, "createdBy", "createdAt", "updatedAt"
+    `;
+    return rows[0];
+  }
+
+  async updateEnergyFlow(id: string, dto: UpdateEnergyFlowDto): Promise<EnergyFlowDto> {
+    await this.getEnergyFlow(id);
+    const sets: Prisma.Sql[] = [];
+    if (dto.targetShop  !== undefined) sets.push(Prisma.sql`"targetShop"  = ${dto.targetShop}`);
+    if (dto.branchLabel !== undefined) sets.push(Prisma.sql`"branchLabel" = ${dto.branchLabel}`);
+    if (dto.value       !== undefined) sets.push(Prisma.sql`value         = ${dto.value}`);
+    if (dto.unit        !== undefined) sets.push(Prisma.sql`unit          = ${dto.unit}`);
+    if (dto.color       !== undefined) sets.push(Prisma.sql`color         = ${dto.color}`);
+    if (dto.order       !== undefined) sets.push(Prisma.sql`"order"       = ${dto.order}`);
+    if (dto.isActive    !== undefined) sets.push(Prisma.sql`"isActive"    = ${dto.isActive}`);
+    if (dto.description !== undefined) sets.push(Prisma.sql`description   = ${dto.description}`);
+    if (sets.length === 0) return this.getEnergyFlow(id);
+    const rows = await this.prisma.$queryRaw<EnergyFlowDto[]>`
+      UPDATE fems.energy_flows SET ${Prisma.join(sets, ', ')}
+       WHERE id = ${id}
+      RETURNING id, "sourceType", "targetShop", "branchLabel", value, unit, color,
+                "order", "isActive", description, "createdBy", "createdAt", "updatedAt"
+    `;
+    return rows[0];
+  }
+
+  async deleteEnergyFlow(id: string): Promise<{ id: string }> {
+    await this.getEnergyFlow(id);
+    await this.prisma.$executeRaw`DELETE FROM fems.energy_flows WHERE id = ${id}`;
+    return { id };
   }
 }

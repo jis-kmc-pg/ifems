@@ -27,6 +27,15 @@ const DSH003UsageDistribution = lazy(() => import('./pages/dashboard/DSH003Usage
 const DSH004ProcessRanking = lazy(() => import('./pages/dashboard/DSH004ProcessRanking'));
 const DSH005CycleRanking = lazy(() => import('./pages/dashboard/DSH005CycleRanking'));
 const DSH008EnergyChangeTopN = lazy(() => import('./pages/dashboard/DSH008EnergyChangeTopN'));
+// HMGMA 화면 모음 (Slide 2/5/27/29 등)
+const MON007FactoryMap     = lazy(() => import('./pages/monitoring/MON007FactoryMap'));
+const DSH009EnergyFlow     = lazy(() => import('./pages/dashboard/DSH009EnergyFlow'));
+const DSH010ShopIntegrated = lazy(() => import('./pages/dashboard/DSH010ShopIntegrated'));
+const DSH011EnergyReport   = lazy(() => import('./pages/dashboard/DSH011EnergyReport'));
+const HVC002RTUStatus      = lazy(() => import('./pages/auxiliary/HVC002RTUStatus'));
+const HVC003RTUDetail      = lazy(() => import('./pages/auxiliary/HVC003RTUDetail'));
+const LGT002LightingControl = lazy(() => import('./pages/auxiliary/LGT002LightingControl'));
+const SET021RTUSchedule    = lazy(() => import('./pages/settings/SET021RTUSchedule'));
 // Alert
 const ALT001PowerQualityStats = lazy(() => import('./pages/alert/ALT001PowerQualityStats'));
 const ALT002AirLeakStats = lazy(() => import('./pages/alert/ALT002AirLeakStats'));
@@ -130,13 +139,18 @@ const router = createBrowserRouter([
       { path: 'settings/energy-alert', element: <SET005EnergyAlert /> },
       { path: 'settings/cycle-energy-alert', element: <SET006CycleEnergyAlert /> },
       { path: 'settings/system', element: <SET015SystemSettings /> },
-      // Aux (遺??ㅻ퉬)
-      { path: 'aux/hvac/overview',     element: <AuxHvacOverview /> },
-      { path: 'aux/lighting/overview', element: <AuxLightingOverview /> },
-      { path: 'aux/zones',             element: <AuxZoneMaster /> },
-      { path: 'aux/schedule-rules',    element: <AuxScheduleRules /> },
-      { path: 'aux/lux-standards',     element: <AuxLuxStandards /> },
-      { path: 'aux/control-history',   element: <AuxControlHistory /> },
+      // 부대설비(Auxiliary) 설정 — 설정 GNB로 이전
+      { path: "aux/hvac/overview",     element: <AuxHvacOverview /> },
+      { path: "aux/lighting/overview", element: <AuxLightingOverview /> },
+      { path: "aux/control-history",   element: <AuxControlHistory /> },
+      // 부대설비 설정 — 설정 GNB로 이전
+      { path: "settings/aux-zones",          element: <AuxZoneMaster /> },
+      { path: "settings/aux-schedule-rules", element: <AuxScheduleRules /> },
+      { path: "settings/aux-lux-standards",  element: <AuxLuxStandards /> },
+      // 구 경로 리다이렉트 (북마크 호환)
+      { path: "aux/zones",          element: <Navigate to="/settings/aux-zones" replace /> },
+      { path: "aux/schedule-rules", element: <Navigate to="/settings/aux-schedule-rules" replace /> },
+      { path: "aux/lux-standards",  element: <Navigate to="/settings/aux-lux-standards" replace /> },
     ],
   },
 ]);
