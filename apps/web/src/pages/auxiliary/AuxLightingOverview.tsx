@@ -5,8 +5,8 @@ import PageHeader from '../../components/layout/PageHeader';
 import KpiCard from '../../components/ui/KpiCard';
 import TrendChart, { type TrendSeries } from '../../components/charts/TrendChart';
 import {
-  getZones, getLuxStandards, getLightingTrend,
-  ZONE_TYPE_LABEL, type Zone, type LuxStandard,
+  getZones, getLuxStandards, getLightingTrend, getZoneLightingStats,
+  ZONE_TYPE_LABEL, type Zone, type LuxStandard, type ZoneLightingStats,
 } from '../../services/auxiliary';
 
 const LGT_TREND_SERIES: TrendSeries[] = [
@@ -28,14 +28,24 @@ function zoneTypeToLuxKey(zoneType: string): string {
   return map[zoneType] ?? '';
 }
 
-function ZoneCard({ zone, requiredLux }: { zone: Zone; requiredLux?: number }) {
-  const lightingCount = zone.lightingCount ?? 0;
-  const ratedW = zone.totalRatedW ?? 0;
-  const kwh24 = zone.lightingKwh24h ?? 0;
-  const lpd = zone.areaSqm && zone.areaSqm > 0 && ratedW > 0
-    ? ratedW / zone.areaSqm
+function ZoneCard({ zone, requiredLux, stat }:
+  { zone: Zone; requiredLux?: number; stat?: ZoneLightingStats }) {
+  // Relay 마스터(fems.lighting_relays) 기준 통계가 있으면 우선 사용,
+  // 없으면 facilities 단위 폴백
+  const relayCount  = stat?.relayCount ?? zone.lightingCount ?? 0;
+  const relayRatedW = stat?.totalRatedW ?? zone.totalRatedW ?? 0;
+  const onCount     = stat?.onCount ?? 0;
+  const onRate      = stat?.onRate ?? 0;
+  const kwh24       = zone.lightingKwh24h ?? 0;
+  const lpd = zone.areaSqm && zone.areaSqm > 0 && relayRatedW > 0
+    ? relayRatedW / zone.areaSqm
     : null;
-  const lpdOver = lpd != null && lpd > 12; // LEED/G-SEED 기준 12 W/㎡
+  const lpdOver = lpd != null && lpd > 12;
+  const onRateColor =
+    relayCount === 0 ? 'text-gray-400'
+    : onRate >= 50 ? 'text-[#F39C12]'
+    : onRate > 0   ? 'text-[#27AE60]'
+    : 'text-gray-500';
 
   return (
     <div className="bg-white dark:bg-[#16213E] border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow">
@@ -49,7 +59,26 @@ function ZoneCard({ zone, requiredLux }: { zone: Zone; requiredLux?: number }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-4 gap-2 mt-3 text-xs">
+      {/* 점등률 강조 영역 */}
+      <div className="grid grid-cols-2 gap-2 mt-3 mb-2 p-2 rounded bg-gray-50 dark:bg-gray-800/40">
+        <div>
+          <div className="text-[10px] text-gray-400 uppercase">점등률</div>
+          <div className={`font-mono font-bold text-lg ${onRateColor}`}>
+            {relayCount > 0 ? `${onRate}%` : '—'}
+          </div>
+          <div className="text-[10px] text-gray-400">
+            {relayCount > 0 ? `${onCount}/${relayCount} relay` : '미등록'}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] text-gray-400 uppercase">24h kWh</div>
+          <div className={`font-mono font-bold text-lg ${kwh24 > 0 ? 'text-[#27AE60]' : 'text-gray-400'}`}>
+            {kwh24 > 0 ? kwh24.toFixed(0) : '—'}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 text-xs">
         <div>
           <div className="text-gray-400">면적</div>
           <div className="font-mono text-gray-700 dark:text-gray-200">
@@ -57,21 +86,15 @@ function ZoneCard({ zone, requiredLux }: { zone: Zone; requiredLux?: number }) {
           </div>
         </div>
         <div>
-          <div className="text-gray-400">회로/정격</div>
-          <div className={`font-mono ${lightingCount > 0 ? 'text-[#F39C12]' : 'text-gray-400'}`}>
-            {lightingCount > 0 ? `${lightingCount}회 / ${(ratedW/1000).toFixed(1)}kW` : '미등록'}
+          <div className="text-gray-400">정격</div>
+          <div className={`font-mono ${relayCount > 0 ? 'text-[#F39C12]' : 'text-gray-400'}`}>
+            {relayCount > 0 ? `${(relayRatedW/1000).toFixed(1)}kW` : '—'}
           </div>
         </div>
         <div>
           <div className="text-gray-400">LPD(W/㎡)</div>
           <div className={`font-mono font-semibold ${lpdOver ? 'text-[#E74C3C]' : lpd != null ? 'text-[#27AE60]' : 'text-gray-400'}`}>
             {lpd != null ? lpd.toFixed(1) : '—'}
-          </div>
-        </div>
-        <div>
-          <div className="text-gray-400">24h kWh</div>
-          <div className={`font-mono font-semibold ${kwh24 > 0 ? 'text-[#27AE60]' : 'text-gray-400'}`}>
-            {kwh24 > 0 ? kwh24.toFixed(0) : '—'}
           </div>
         </div>
       </div>
@@ -100,6 +123,22 @@ export default function AuxLightingOverview() {
     queryKey: ['aux', 'lighting-trend', 24],
     queryFn: () => getLightingTrend(24),
   });
+
+  const { data: zoneStats = [] } = useQuery({
+    queryKey: ['aux', 'zone-lighting-stats'],
+    queryFn: getZoneLightingStats,
+    refetchInterval: 30_000,
+  });
+
+  const statsByZone = useMemo(() => {
+    const m = new Map<string, ZoneLightingStats>();
+    zoneStats.forEach(s => m.set(s.zoneId, s));
+    return m;
+  }, [zoneStats]);
+
+  const totalOn = useMemo(() => zoneStats.reduce((s, z) => s + (z.onCount ?? 0), 0), [zoneStats]);
+  const totalRelays = useMemo(() => zoneStats.reduce((s, z) => s + (z.relayCount ?? 0), 0), [zoneStats]);
+  const overallOnRate = totalRelays > 0 ? Math.round((totalOn / totalRelays) * 100) : 0;
 
   const luxByZoneType = useMemo(() => {
     const m = new Map<string, LuxStandard>();
@@ -141,12 +180,13 @@ export default function AuxLightingOverview() {
         breadcrumbs={[{ label: '부대설비' }, { label: '조명' }, { label: '종합 현황' }]}
       />
 
-      {/* KPI */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+      {/* KPI — Relay 마스터 기반 통계 통합 */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
         <KpiCard label="조명 대상 영역" value={lightingZones.length} unit="개" />
-        <KpiCard label="등록 회로 수" value={totalCircuits} unit="회로" />
+        <KpiCard label="등록 Relay" value={totalRelays} unit="개" />
         <KpiCard label="총 정격 전력" value={totalRatedKw.toFixed(1)} unit="kW" />
         <KpiCard label="24h 사용량" value={totalKwh24h.toFixed(0)} unit="kWh" />
+        <KpiCard label="점등률 (live)" value={overallOnRate} unit="%" />
       </div>
 
       {/* 24h 트렌드 차트 */}
@@ -195,6 +235,7 @@ export default function AuxLightingOverview() {
               key={z.id}
               zone={z}
               requiredLux={luxByZoneType.get(zoneTypeToLuxKey(z.zoneType))?.requiredLux}
+              stat={statsByZone.get(z.id)}
             />
           ))}
         </div>

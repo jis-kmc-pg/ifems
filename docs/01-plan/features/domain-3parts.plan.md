@@ -1,8 +1,9 @@
 # i-FEMS 도메인 모델 — Site/Factory/Line/Facility + 공장 3대 파트 (유틸리티/공조/조명)
 
-> **Status**: 📝 Draft — 사용자 승인 후 단계적 구현
+> **Status**: ✅ Phase 2~4 구현 완료 (커밋 e0c567f → 후속 LGT-001/MON-002 통합 + 본 문서 갱신)
 > **Date**: 2026-05-22
 > **Background**: 사용자 정의 도메인 기준 명문화 ("기준을 정해야 할 것 같은데...")
+> **Gap Analysis (1차)**: 88% Match — LGT-001/MON-002 통합 누락 + SetPoint 미구현 → 본 갱신으로 해소
 
 ---
 
@@ -275,3 +276,38 @@ Phase 2 PR: feat(domain): Site 계층 + Lighting Relay 마스터 신설
 Phase 3 PR: refactor(ui): 사이드바 3대 파트 그룹화 + 핵심 화면 보강
 Phase 4 PR: feat(kpi): 라인·Zone별 사용량 합산 + 점등률 KPI
 ```
+
+---
+
+## 9. 구현 후 추가 사항 (Phase 4 자연 확장)
+
+### 9.1 ZONE_ENV facility 패턴
+Zone별 실내 온도/환경 데이터를 모델링하기 위해 가상 facility 패턴 도입:
+- `public.lines` 에 `ZONE_ENV` 라인 신설 (모든 환경 센서 facility를 한 라인에 모음)
+- Zone마다 1개 `facility(type='ZONE_ENV')` 생성 (Zone과 1:1 매핑)
+- 그 facility에 `Tag(tagName='*_INDOOR_TEMP', measureType=INSTANTANEOUS, category=ENVIRONMENT, unit='°C')` 등록
+- 실측 BMS 도입 시 동일 tag 스키마에 게이트웨이 데이터를 흘려보내면 됨
+
+### 9.2 라인별 합산 view 2종 (Phase 4)
+- `public.v_line_facility_count` — 라인 × 3대 파트 카운트
+- `public.v_line_usage_24h` — 라인 × energyType 24h 사용량 (CUMULATIVE tag 차분 합)
+
+### 9.3 Phase 4 신규 API
+- `GET /api/aux/zones/stats/indoor-temp` — Zone별 최신 실내 온도
+- `GET /api/aux/zones/stats/lighting` — Zone별 점등률 (onRate, onCount) SQL 집계
+- `GET /api/aux/lighting-relays/live` — Relay별 onOffTagId 라이브 값
+- `GET /api/aux/lines/stats` — 라인별 통합 KPI (3대 파트 카운트 + 24h 사용량)
+
+### 9.4 후속 추천 (Phase 5)
+- **공조 SetPoint Tag** — `Tag(category=CONTROL, tagName='*_SETPOINT', unit='°C')` 등록 + Zone 카드/HVC-003에 표시
+- **외기 온도 / 조도 lux** — 옥외 환경 데이터 통합
+- **라인별 원단위 / 피크** — 생산량 연계 (MES 필요)
+- **공조 자동 제어 룰의 HVAC 전용 뷰** — schedule_rules.targetType='HVAC' 필터 화면
+
+---
+
+## 10. Gap Analysis 이력
+
+| 시점 | Match | 발견 GAP | 조치 |
+|------|-------|---------|------|
+| 2026-05-22 1차 | 88% | LGT-001 점등률 미통합 / MON-002 통합 KPI 미통합 / SetPoint 미구현 / Plan에 ZONE_ENV/line view 미명시 | LGT-001 통합·MON-002 KPI 추가·문서 § 9 추가 (현재 본 갱신) — SetPoint는 Phase 5로 분리 |

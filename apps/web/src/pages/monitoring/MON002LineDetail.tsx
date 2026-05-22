@@ -10,6 +10,8 @@ import { useSearchFilter } from '../../hooks/useSearchFilter';
 import { formatInterval } from '../../lib/chart-utils';
 import { getLineList } from '../../services/settings';
 import type { Line } from '../../services/settings';
+import { getLineStats } from '../../services/auxiliary';
+import KpiCard from '../../components/ui/KpiCard';
 
 export default function MON002LineDetail() {
   // DB에서 라인 목록 조회 (동적 탭)
@@ -17,6 +19,13 @@ export default function MON002LineDetail() {
     queryKey: ['lines'],
     queryFn: () => getLineList(),
     staleTime: 5 * 60 * 1000,
+  });
+
+  // Phase 4: 라인 통합 통계 (3대 파트 + 24h 사용량)
+  const { data: lineStats = [] } = useQuery({
+    queryKey: ['lines', 'stats'],
+    queryFn: getLineStats,
+    refetchInterval: 60_000,
   });
 
   // 활성 라인: DB에서 가져온 첫 번째 라인의 code
@@ -90,6 +99,22 @@ export default function MON002LineDetail() {
           ))}
         </div>
       </div>
+
+      {/* Phase 4: 선택 라인 통합 KPI (3대 파트 카운트 + 24h elec/air/gas) */}
+      {(() => {
+        const stat = lineStats.find(s => s.lineCode === activeLineCode);
+        if (!stat) return null;
+        return (
+          <div className="px-4 pt-3 grid grid-cols-2 md:grid-cols-6 gap-2">
+            <KpiCard label={`${stat.lineCode} · 총 facility`} value={stat.totalCount} unit="대" />
+            <KpiCard label="유틸리티"  value={stat.utilityCount}  unit="대" />
+            <KpiCard label="공조(HVAC)" value={stat.hvacCount}    unit="대" />
+            <KpiCard label="조명"      value={stat.lightingCount} unit="대" />
+            <KpiCard label="24h 전력"  value={(stat.elecKwh24h ?? 0).toFixed(0)} unit="kWh" />
+            <KpiCard label="24h 에어"  value={(stat.airKft3_24h ?? 0).toFixed(0)} unit="kft³" />
+          </div>
+        );
+      })()}
 
       {/* 필터바 + 줌 네비게이션 */}
       <div className="flex-shrink-0 px-4 pt-3">
