@@ -13,6 +13,9 @@ import {
 import {
   CreateEnergyFlowDto, UpdateEnergyFlowDto, EnergyFlowDto,
 } from './dto/energy-flow.dto';
+import {
+  CreateLightingRelayDto, UpdateLightingRelayDto, LightingRelayDto,
+} from './dto/lighting-relay.dto';
 
 /**
  * 부대설비(공조/조명/환경) 도메인 API — i-FEMS fems 스키마 골격
@@ -180,5 +183,44 @@ export class AuxController {
   @ApiOperation({ summary: '에너지 흐름 매핑 삭제' })
   deleteEnergyFlow(@Param('id') id: string) {
     return this.aux.deleteEnergyFlow(id);
+  }
+
+  // ──────────── lighting relays (조명 회로 마스터 CRUD) ────────────
+  @Get('lighting-relays')
+  @ApiOperation({ summary: '조명 Relay 목록' })
+  @ApiQuery({ name: 'zoneId', required: false, type: String })
+  listLightingRelays(@Query('zoneId') zoneId?: string): Promise<LightingRelayDto[]> {
+    return this.aux.listLightingRelays(zoneId);
+  }
+
+  @Get('lighting-relays/:id')
+  @ApiOperation({ summary: '조명 Relay 단건' })
+  getLightingRelay(@Param('id') id: string): Promise<LightingRelayDto> {
+    return this.aux.getLightingRelay(id);
+  }
+
+  @Post('lighting-relays')
+  @ApiOperation({ summary: '조명 Relay 생성' })
+  createLightingRelay(@Body() dto: CreateLightingRelayDto): Promise<LightingRelayDto> {
+    return this.aux.createLightingRelay(dto);
+  }
+
+  @Patch('lighting-relays/:id')
+  @ApiOperation({ summary: '조명 Relay 수정' })
+  updateLightingRelay(@Param('id') id: string, @Body() dto: UpdateLightingRelayDto): Promise<LightingRelayDto> {
+    return this.aux.updateLightingRelay(id, dto);
+  }
+
+  @Delete('lighting-relays/:id')
+  @ApiOperation({ summary: '조명 Relay 삭제' })
+  deleteLightingRelay(@Param('id') id: string) {
+    return this.aux.deleteLightingRelay(id);
+  }
+
+  // ──────────── zone stats (Phase 4) ────────────
+  @Get('zones/stats/lighting')
+  @ApiOperation({ summary: 'Zone별 조명 통계 (Relay 수 + 정격W 합)' })
+  getZoneLightingStats() {
+    return this.aux.getZoneLightingStats();
   }
 }

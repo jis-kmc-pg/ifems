@@ -504,3 +504,28 @@ export const getSystemSettings = () =>
 
 export const saveSystemSettings = (settings: Record<string, SystemSettingValue>) =>
   putApi({} as Record<string, SystemSettingValue>, '/settings/system', settings);
+
+// ──────────────────────────────────────────────
+// Phase 2 — Sites CRUD
+// ──────────────────────────────────────────────
+export interface Site {
+  id: string;
+  code: string;
+  name: string;
+  fullName: string | null;
+  address: string | null;
+  isActive: boolean;
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+  factoryCount?: number;
+}
+
+export const getSites = () =>
+  fetchApi<Site[]>([], '/settings/sites');
+export const createSite = (data: { code: string; name: string; fullName?: string; address?: string; order?: number }) =>
+  postApi<Site>({} as Site, '/settings/sites', data);
+export const updateSite = (id: string, data: Partial<Site>) =>
+  putApi<Site>({} as Site, `/settings/sites/${id}`, data);
+export const deleteSite = (id: string) =>
+  deleteApi<{ id: string }>({ id }, `/settings/sites/${id}`);

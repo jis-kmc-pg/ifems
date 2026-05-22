@@ -272,3 +272,63 @@ export const updateEnergyFlow = (id: string, data: UpdateEnergyFlowInput) =>
 
 export const deleteEnergyFlow = (id: string) =>
   deleteApi<{ id: string }>({ id }, `/aux/energy-flows/${id}`);
+
+// ──────────────────────────────────────────────
+// lighting relays (Phase 2 — 조명 Relay 마스터)
+// ──────────────────────────────────────────────
+export interface LightingRelay {
+  id: string;
+  facilityId: string;
+  zoneId: string | null;
+  code: string;
+  name: string;
+  ratedW: number | null;
+  fixtureCount: number | null;
+  fixtureType: string | null;
+  onOffTagId: string | null;
+  powerTagId: string | null;
+  metadata: Record<string, unknown> | null;
+  order: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  // join 보강
+  facilityCode?: string;
+  facilityName?: string;
+  zoneCode?: string;
+}
+
+export interface CreateLightingRelayInput {
+  facilityId: string;
+  zoneId?: string;
+  code: string;
+  name: string;
+  ratedW?: number;
+  fixtureCount?: number;
+  fixtureType?: string;
+  onOffTagId?: string;
+  powerTagId?: string;
+  metadata?: Record<string, unknown>;
+  order?: number;
+}
+export type UpdateLightingRelayInput = Partial<Omit<CreateLightingRelayInput, 'code'> & { isActive: boolean }>;
+
+export const getLightingRelays = (zoneId?: string) =>
+  fetchApi<LightingRelay[]>([], '/aux/lighting-relays', zoneId ? { zoneId } : undefined);
+export const createLightingRelay = (data: CreateLightingRelayInput) =>
+  postApi<LightingRelay>({} as LightingRelay, '/aux/lighting-relays', data);
+export const updateLightingRelay = (id: string, data: UpdateLightingRelayInput) =>
+  patchApi<LightingRelay>({} as LightingRelay, `/aux/lighting-relays/${id}`, data);
+export const deleteLightingRelay = (id: string) =>
+  deleteApi<{ id: string }>({ id }, `/aux/lighting-relays/${id}`);
+
+// Zone별 조명 통계 (Phase 4)
+export interface ZoneLightingStats {
+  zoneId: string;
+  zoneCode: string;
+  zoneName: string;
+  relayCount: number;
+  totalRatedW: number;
+}
+export const getZoneLightingStats = () =>
+  fetchApi<ZoneLightingStats[]>([], '/aux/zones/stats/lighting');

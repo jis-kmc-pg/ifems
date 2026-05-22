@@ -36,6 +36,10 @@ const HVC002RTUStatus      = lazy(() => import('./pages/auxiliary/HVC002RTUStatu
 const HVC003RTUDetail      = lazy(() => import('./pages/auxiliary/HVC003RTUDetail'));
 const LGT002LightingControl = lazy(() => import('./pages/auxiliary/LGT002LightingControl'));
 const SET021RTUSchedule    = lazy(() => import('./pages/settings/SET021RTUSchedule'));
+// Phase 2/3 — Site / Lighting Relay 마스터 + Relay 목록
+const SET016SiteMaster           = lazy(() => import('./pages/settings/SET016SiteMaster'));
+const SET022LightingRelayMaster  = lazy(() => import('./pages/settings/SET022LightingRelayMaster'));
+const AuxRelayList               = lazy(() => import('./pages/auxiliary/AuxRelayList'));
 // Alert
 const ALT001PowerQualityStats = lazy(() => import('./pages/alert/ALT001PowerQualityStats'));
 const ALT002AirLeakStats = lazy(() => import('./pages/alert/ALT002AirLeakStats'));
@@ -160,6 +164,9 @@ const router = createBrowserRouter([
       { path: 'aux/hvac/rtu-detail',       element: <HVC003RTUDetail /> },
       { path: 'aux/lighting/control',      element: <LGT002LightingControl /> },
       { path: 'settings/aux-rtu-schedule', element: <SET021RTUSchedule /> },
+      { path: 'settings/site',                  element: <SET016SiteMaster /> },
+      { path: 'settings/aux-lighting-relays',   element: <SET022LightingRelayMaster /> },
+      { path: 'aux/lighting/relays',            element: <AuxRelayList /> },
     ],
   },
 ]);

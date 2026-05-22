@@ -10,6 +10,9 @@ import {
 import {
   CreateEnergyFlowDto, UpdateEnergyFlowDto, EnergyFlowDto,
 } from './dto/energy-flow.dto';
+import {
+  CreateLightingRelayDto, UpdateLightingRelayDto, LightingRelayDto,
+} from './dto/lighting-relay.dto';
 
 /**
  * 부대설비(공조/조명/환경) 도메인 서비스
@@ -388,5 +391,118 @@ export class AuxService {
     await this.getEnergyFlow(id);
     await this.prisma.$executeRaw`DELETE FROM fems.energy_flows WHERE id = ${id}`;
     return { id };
+  }
+
+  // ──────────────────────────────────────────────
+  // lighting_relays (Phase 2-② 조명 Relay 마스터 CRUD)
+  // ──────────────────────────────────────────────
+
+  async listLightingRelays(zoneId?: string): Promise<LightingRelayDto[]> {
+    if (zoneId) {
+      return this.prisma.$queryRaw<LightingRelayDto[]>`
+        SELECT r.id, r."facilityId", r."zoneId", r.code, r.name,
+               r."ratedW", r."fixtureCount", r."fixtureType",
+               r."onOffTagId", r."powerTagId", r.metadata, r."order", r."isActive",
+               r."createdAt", r."updatedAt",
+               f.code AS "facilityCode", f.name AS "facilityName",
+               z.code AS "zoneCode"
+          FROM fems.lighting_relays r
+          LEFT JOIN public.facilities f ON r."facilityId" = f.id
+          LEFT JOIN fems.zones z         ON r."zoneId" = z.id
+         WHERE r."zoneId" = ${zoneId}
+         ORDER BY z.code NULLS LAST, r."order", r.code
+      `;
+    }
+    return this.prisma.$queryRaw<LightingRelayDto[]>`
+      SELECT r.id, r."facilityId", r."zoneId", r.code, r.name,
+             r."ratedW", r."fixtureCount", r."fixtureType",
+             r."onOffTagId", r."powerTagId", r.metadata, r."order", r."isActive",
+             r."createdAt", r."updatedAt",
+             f.code AS "facilityCode", f.name AS "facilityName",
+             z.code AS "zoneCode"
+        FROM fems.lighting_relays r
+        LEFT JOIN public.facilities f ON r."facilityId" = f.id
+        LEFT JOIN fems.zones z         ON r."zoneId" = z.id
+       ORDER BY z.code NULLS LAST, r."order", r.code
+    `;
+  }
+
+  async getLightingRelay(id: string): Promise<LightingRelayDto> {
+    const rows = await this.prisma.$queryRaw<LightingRelayDto[]>`
+      SELECT id, "facilityId", "zoneId", code, name, "ratedW", "fixtureCount", "fixtureType",
+             "onOffTagId", "powerTagId", metadata, "order", "isActive", "createdAt", "updatedAt"
+        FROM fems.lighting_relays WHERE id = ${id}
+    `;
+    if (rows.length === 0) throw new NotFoundException(`Lighting relay not found: ${id}`);
+    return rows[0];
+  }
+
+  async createLightingRelay(dto: CreateLightingRelayDto): Promise<LightingRelayDto> {
+    const rows = await this.prisma.$queryRaw<LightingRelayDto[]>`
+      INSERT INTO fems.lighting_relays
+        ("facilityId","zoneId",code,name,"ratedW","fixtureCount","fixtureType",
+         "onOffTagId","powerTagId",metadata,"order")
+      VALUES (
+        ${dto.facilityId}, ${dto.zoneId ?? null}, ${dto.code}, ${dto.name},
+        ${dto.ratedW ?? null}, ${dto.fixtureCount ?? null}, ${dto.fixtureType ?? null},
+        ${dto.onOffTagId ?? null}, ${dto.powerTagId ?? null},
+        ${dto.metadata ? Prisma.sql`${JSON.stringify(dto.metadata)}::jsonb` : Prisma.sql`NULL`},
+        ${dto.order ?? 0}
+      )
+      RETURNING id, "facilityId", "zoneId", code, name, "ratedW", "fixtureCount", "fixtureType",
+                "onOffTagId", "powerTagId", metadata, "order", "isActive", "createdAt", "updatedAt"
+    `;
+    return rows[0];
+  }
+
+  async updateLightingRelay(id: string, dto: UpdateLightingRelayDto): Promise<LightingRelayDto> {
+    await this.getLightingRelay(id);
+    const sets: Prisma.Sql[] = [];
+    if (dto.facilityId   !== undefined) sets.push(Prisma.sql`"facilityId" = ${dto.facilityId}`);
+    if (dto.zoneId       !== undefined) sets.push(Prisma.sql`"zoneId" = ${dto.zoneId}`);
+    if (dto.name         !== undefined) sets.push(Prisma.sql`name = ${dto.name}`);
+    if (dto.ratedW       !== undefined) sets.push(Prisma.sql`"ratedW" = ${dto.ratedW}`);
+    if (dto.fixtureCount !== undefined) sets.push(Prisma.sql`"fixtureCount" = ${dto.fixtureCount}`);
+    if (dto.fixtureType  !== undefined) sets.push(Prisma.sql`"fixtureType" = ${dto.fixtureType}`);
+    if (dto.onOffTagId   !== undefined) sets.push(Prisma.sql`"onOffTagId" = ${dto.onOffTagId}`);
+    if (dto.powerTagId   !== undefined) sets.push(Prisma.sql`"powerTagId" = ${dto.powerTagId}`);
+    if (dto.metadata     !== undefined) sets.push(
+      dto.metadata === null
+        ? Prisma.sql`metadata = NULL`
+        : Prisma.sql`metadata = ${JSON.stringify(dto.metadata)}::jsonb`,
+    );
+    if (dto.order        !== undefined) sets.push(Prisma.sql`"order" = ${dto.order}`);
+    if (dto.isActive     !== undefined) sets.push(Prisma.sql`"isActive" = ${dto.isActive}`);
+    if (sets.length === 0) return this.getLightingRelay(id);
+
+    const rows = await this.prisma.$queryRaw<LightingRelayDto[]>`
+      UPDATE fems.lighting_relays SET ${Prisma.join(sets, ', ')}
+       WHERE id = ${id}
+      RETURNING id, "facilityId", "zoneId", code, name, "ratedW", "fixtureCount", "fixtureType",
+                "onOffTagId", "powerTagId", metadata, "order", "isActive", "createdAt", "updatedAt"
+    `;
+    return rows[0];
+  }
+
+  async deleteLightingRelay(id: string): Promise<{ id: string }> {
+    await this.getLightingRelay(id);
+    await this.prisma.$executeRaw`DELETE FROM fems.lighting_relays WHERE id = ${id}`;
+    return { id };
+  }
+
+  // ──────────────────────────────────────────────
+  // zone stats — Zone별 facility 카운트 + 점등률 (Phase 4)
+  // ──────────────────────────────────────────────
+  async getZoneLightingStats() {
+    return this.prisma.$queryRaw`
+      SELECT z.id AS "zoneId", z.code AS "zoneCode", z.name AS "zoneName",
+             count(r.id)::int AS "relayCount",
+             SUM(COALESCE(r."ratedW",0))::float AS "totalRatedW"
+        FROM fems.zones z
+        LEFT JOIN fems.lighting_relays r ON r."zoneId" = z.id
+       WHERE z."isActive" = true
+       GROUP BY z.id, z.code, z.name
+       ORDER BY z.code
+    `;
   }
 }

@@ -527,4 +527,31 @@ export class SettingsController {
       machId: body.newMachId,
     });
   }
+
+  // ──────────────────────────────────────────────
+  // Phase 2 — Sites CRUD
+  // ──────────────────────────────────────────────
+  @Get('sites')
+  @ApiOperation({ summary: '사이트 목록' })
+  listSites() {
+    return this.settingsService.listSites(true);
+  }
+
+  @Post('sites')
+  @ApiOperation({ summary: '사이트 생성' })
+  createSite(@Body() dto: { code: string; name: string; fullName?: string; address?: string; order?: number }) {
+    return this.settingsService.createSite(dto);
+  }
+
+  @Put('sites/:id')
+  @ApiOperation({ summary: '사이트 수정' })
+  updateSite(@Param('id') id: string, @Body() dto: any) {
+    return this.settingsService.updateSite(id, dto);
+  }
+
+  @Delete('sites/:id')
+  @ApiOperation({ summary: '사이트 삭제' })
+  deleteSite(@Param('id') id: string) {
+    return this.settingsService.deleteSite(id);
+  }
 }

@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { Prisma } from '@prisma/client';
 import * as XLSX from 'xlsx';
 import { CreateFacilityTypeDto, UpdateFacilityTypeDto } from './dto/facility-type.dto';
 import { BulkUploadResponseDto, BulkUploadResultItem } from './dto/tag-bulk.dto';
@@ -1829,5 +1830,56 @@ export class SettingsService {
     );
 
     return { updated: result };
+  }
+
+  // ──────────────────────────────────────────────
+  // Phase 2 — Sites CRUD (사이트 마스터)
+  // ──────────────────────────────────────────────
+
+  async listSites(activeOnly = true): Promise<any[]> {
+    return this.prisma.$queryRaw`
+      SELECT s.id, s.code, s.name, s."fullName", s.address, s."isActive", s."order",
+             s."createdAt", s."updatedAt",
+             count(f.id)::int AS "factoryCount"
+        FROM public.sites s
+        LEFT JOIN public.factories f ON f."siteId" = s.id
+       WHERE (${!activeOnly}::boolean OR s."isActive" = true)
+       GROUP BY s.id
+       ORDER BY s."order", s.code
+    `;
+  }
+
+  async createSite(dto: { code: string; name: string; fullName?: string; address?: string; order?: number }) {
+    const rows = await this.prisma.$queryRaw<any[]>`
+      INSERT INTO public.sites (code, name, "fullName", address, "order")
+      VALUES (${dto.code}, ${dto.name}, ${dto.fullName ?? null}, ${dto.address ?? null}, ${dto.order ?? 0})
+      RETURNING id, code, name, "fullName", address, "isActive", "order", "createdAt", "updatedAt"
+    `;
+    return rows[0];
+  }
+
+  async updateSite(
+    id: string,
+    dto: { name?: string; fullName?: string | null; address?: string | null; order?: number; isActive?: boolean },
+  ) {
+    const sets: Prisma.Sql[] = [];
+    if (dto.name     !== undefined) sets.push(Prisma.sql`name = ${dto.name}`);
+    if (dto.fullName !== undefined) sets.push(Prisma.sql`"fullName" = ${dto.fullName}`);
+    if (dto.address  !== undefined) sets.push(Prisma.sql`address = ${dto.address}`);
+    if (dto.order    !== undefined) sets.push(Prisma.sql`"order" = ${dto.order}`);
+    if (dto.isActive !== undefined) sets.push(Prisma.sql`"isActive" = ${dto.isActive}`);
+    if (sets.length === 0) return null;
+
+    const rows = await this.prisma.$queryRaw<any[]>`
+      UPDATE public.sites SET ${Prisma.join(sets, ', ')}
+       WHERE id = ${id}
+      RETURNING id, code, name, "fullName", address, "isActive", "order", "createdAt", "updatedAt"
+    `;
+    return rows[0];
+  }
+
+  async deleteSite(id: string) {
+    await this.prisma.$executeRaw`DELETE FROM public.sites WHERE id = ${id}`;
+    return { id };
   }
 }
