@@ -151,6 +151,15 @@ const router = createBrowserRouter([
       { path: "aux/zones",          element: <Navigate to="/settings/aux-zones" replace /> },
       { path: "aux/schedule-rules", element: <Navigate to="/settings/aux-schedule-rules" replace /> },
       { path: "aux/lux-standards",  element: <Navigate to="/settings/aux-lux-standards" replace /> },
+      // 통합 신규 화면 (모니터링/대시보드/부대설비/설정 의미별 통합)
+      { path: 'monitoring/factory-map',    element: <MON007FactoryMap /> },
+      { path: 'dashboard/energy-flow',     element: <DSH009EnergyFlow /> },
+      { path: 'dashboard/shop-integrated', element: <DSH010ShopIntegrated /> },
+      { path: 'dashboard/energy-report',   element: <DSH011EnergyReport /> },
+      { path: 'aux/hvac/rtu-status',       element: <HVC002RTUStatus /> },
+      { path: 'aux/hvac/rtu-detail',       element: <HVC003RTUDetail /> },
+      { path: 'aux/lighting/control',      element: <LGT002LightingControl /> },
+      { path: 'settings/aux-rtu-schedule', element: <SET021RTUSchedule /> },
     ],
   },
 ]);
