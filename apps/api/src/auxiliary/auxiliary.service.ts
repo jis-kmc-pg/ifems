@@ -491,18 +491,103 @@ export class AuxService {
   }
 
   // ──────────────────────────────────────────────
-  // zone stats — Zone별 facility 카운트 + 점등률 (Phase 4)
+  // zone stats — Phase 4 보강: 점등률 SQL 집계 + 실내 온도
   // ──────────────────────────────────────────────
+
+  /**
+   * Zone별 조명 통계 — Relay 수 + 정격W + 점등 ON 수 + 점등률(%)
+   * 점등률 = onOffTagId의 최근 값(0/1)을 기준으로 SUM/COUNT
+   */
   async getZoneLightingStats() {
     return this.prisma.$queryRaw`
+      WITH relay_latest AS (
+        SELECT r.id AS relay_id, r."zoneId",
+               COALESCE(r."ratedW", 0) AS rated_w,
+               latest.value AS on_value
+          FROM fems.lighting_relays r
+          LEFT JOIN LATERAL (
+            SELECT value FROM public.tag_data_raw d
+             WHERE d."tagId" = r."onOffTagId"
+             ORDER BY d.timestamp DESC LIMIT 1
+          ) latest ON true
+         WHERE r."isActive" = true
+      )
       SELECT z.id AS "zoneId", z.code AS "zoneCode", z.name AS "zoneName",
-             count(r.id)::int AS "relayCount",
-             SUM(COALESCE(r."ratedW",0))::float AS "totalRatedW"
+             count(rl.relay_id)::int                                AS "relayCount",
+             SUM(rl.rated_w)::float                                  AS "totalRatedW",
+             SUM(CASE WHEN rl.on_value >= 0.5 THEN 1 ELSE 0 END)::int AS "onCount",
+             CASE WHEN count(rl.relay_id) > 0
+                  THEN ROUND(100.0 * SUM(CASE WHEN rl.on_value >= 0.5 THEN 1 ELSE 0 END)
+                                    / count(rl.relay_id), 1)::float
+                  ELSE 0 END                                        AS "onRate"
         FROM fems.zones z
-        LEFT JOIN fems.lighting_relays r ON r."zoneId" = z.id
+        LEFT JOIN relay_latest rl ON rl."zoneId" = z.id
        WHERE z."isActive" = true
        GROUP BY z.id, z.code, z.name
        ORDER BY z.code
+    `;
+  }
+
+  /**
+   * Relay별 최근 ON/OFF 상태 (게이트웨이 연동 PoC — onOffTagId의 마지막 값)
+   */
+  async getRelayLiveStatus() {
+    return this.prisma.$queryRaw`
+      SELECT r.id, r.code, r.name, r."zoneId", r."ratedW",
+             z.code AS "zoneCode",
+             latest.value AS "onOff",
+             latest.timestamp AS "asOf"
+        FROM fems.lighting_relays r
+        LEFT JOIN fems.zones z ON r."zoneId" = z.id
+        LEFT JOIN LATERAL (
+          SELECT value, timestamp FROM public.tag_data_raw d
+           WHERE d."tagId" = r."onOffTagId"
+           ORDER BY d.timestamp DESC LIMIT 1
+        ) latest ON true
+       WHERE r."isActive" = true
+       ORDER BY z.code NULLS LAST, r."order", r.code
+    `;
+  }
+
+  /**
+   * Zone별 최신 실내 온도 (ZONE_ENV facility의 INDOOR_TEMP tag)
+   */
+  async getZoneIndoorTemps() {
+    return this.prisma.$queryRaw`
+      SELECT z.id AS "zoneId", z.code AS "zoneCode", z.name AS "zoneName", z."zoneType",
+             latest.value::float AS "temperatureC",
+             latest.timestamp AS "asOf"
+        FROM fems.zones z
+        LEFT JOIN public.facilities f ON f."zoneId" = z.id AND f.type = 'ZONE_ENV'
+        LEFT JOIN public.tags t ON t."facilityId" = f.id AND t."tagName" LIKE '%_INDOOR_TEMP'
+        LEFT JOIN LATERAL (
+          SELECT value, timestamp FROM public.tag_data_raw d
+           WHERE d."tagId" = t.id
+           ORDER BY d.timestamp DESC LIMIT 1
+        ) latest ON true
+       WHERE z."isActive" = true
+       ORDER BY z.code
+    `;
+  }
+
+  /**
+   * 라인별 facility 카운트 (3대 파트) + 24h 사용량 — v_line_*  view 활용
+   */
+  async getLineStats() {
+    return this.prisma.$queryRaw`
+      SELECT c."lineId", c."lineCode", c."lineName",
+             c.utility_count::int  AS "utilityCount",
+             c.hvac_count::int     AS "hvacCount",
+             c.lighting_count::int AS "lightingCount",
+             c.total_count::int    AS "totalCount",
+             SUM(CASE WHEN u."energyType"::text = 'elec' THEN u.usage_24h ELSE 0 END)::float AS "elecKwh24h",
+             SUM(CASE WHEN u."energyType"::text = 'air'  THEN u.usage_24h ELSE 0 END)::float AS "airKft3_24h",
+             SUM(CASE WHEN u."energyType"::text = 'gas'  THEN u.usage_24h ELSE 0 END)::float AS "gasSft3_24h"
+        FROM public.v_line_facility_count c
+        LEFT JOIN public.v_line_usage_24h u ON u."lineId" = c."lineId"
+       GROUP BY c."lineId", c."lineCode", c."lineName",
+                c.utility_count, c.hvac_count, c.lighting_count, c.total_count
+       ORDER BY c."lineCode"
     `;
   }
 }

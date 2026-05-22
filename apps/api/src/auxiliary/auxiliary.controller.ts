@@ -193,6 +193,13 @@ export class AuxController {
     return this.aux.listLightingRelays(zoneId);
   }
 
+  // ⚠ specific route는 :id 보다 먼저 정의 (NestJS는 선언 순서대로 매칭)
+  @Get('lighting-relays/live')
+  @ApiOperation({ summary: 'Relay별 최근 ON/OFF 라이브 상태 (게이트웨이 PoC)' })
+  getRelayLiveStatus() {
+    return this.aux.getRelayLiveStatus();
+  }
+
   @Get('lighting-relays/:id')
   @ApiOperation({ summary: '조명 Relay 단건' })
   getLightingRelay(@Param('id') id: string): Promise<LightingRelayDto> {
@@ -219,8 +226,20 @@ export class AuxController {
 
   // ──────────── zone stats (Phase 4) ────────────
   @Get('zones/stats/lighting')
-  @ApiOperation({ summary: 'Zone별 조명 통계 (Relay 수 + 정격W 합)' })
+  @ApiOperation({ summary: 'Zone별 조명 통계 (Relay 수 + 정격W + 점등 ON 수 + 점등률)' })
   getZoneLightingStats() {
     return this.aux.getZoneLightingStats();
+  }
+
+  @Get('zones/stats/indoor-temp')
+  @ApiOperation({ summary: 'Zone별 최신 실내 온도 (°C)' })
+  getZoneIndoorTemps() {
+    return this.aux.getZoneIndoorTemps();
+  }
+
+  @Get('lines/stats')
+  @ApiOperation({ summary: '라인별 facility 카운트(3대 파트) + 24h 사용량' })
+  getLineStats() {
+    return this.aux.getLineStats();
   }
 }

@@ -322,13 +322,60 @@ export const updateLightingRelay = (id: string, data: UpdateLightingRelayInput) 
 export const deleteLightingRelay = (id: string) =>
   deleteApi<{ id: string }>({ id }, `/aux/lighting-relays/${id}`);
 
-// Zone별 조명 통계 (Phase 4)
+// Zone별 조명 통계 (Phase 4 — onCount/onRate 포함)
 export interface ZoneLightingStats {
   zoneId: string;
   zoneCode: string;
   zoneName: string;
   relayCount: number;
   totalRatedW: number;
+  onCount: number;
+  onRate: number;
 }
 export const getZoneLightingStats = () =>
   fetchApi<ZoneLightingStats[]>([], '/aux/zones/stats/lighting');
+
+// ──────────────────────────────────────────────
+// Phase 4 KPI 확장 — Zone 온도 / Relay live / Line stats
+// ──────────────────────────────────────────────
+
+export interface ZoneIndoorTemp {
+  zoneId: string;
+  zoneCode: string;
+  zoneName: string;
+  zoneType: string;
+  temperatureC: number | null;
+  asOf: string | null;
+}
+export const getZoneIndoorTemps = () =>
+  fetchApi<ZoneIndoorTemp[]>([], '/aux/zones/stats/indoor-temp');
+
+export interface RelayLive {
+  id: string;
+  code: string;
+  name: string;
+  zoneId: string | null;
+  zoneCode: string | null;
+  ratedW: number | null;
+  onOff: number | null;
+  asOf: string | null;
+}
+export const getRelayLiveStatus = () =>
+  fetchApi<RelayLive[]>([], '/aux/lighting-relays/live');
+
+export interface LineStat {
+  lineId: string;
+  lineCode: string;
+  lineName: string;
+  utilityCount: number;
+  hvacCount: number;
+  lightingCount: number;
+  totalCount: number;
+  elecKwh24h: number;
+  airKft3_24h: number;
+  gasSft3_24h: number;
+}
+export const getLineStats = () =>
+  fetchApi<LineStat[]>([], '/aux/lines/stats');
+
+// ZoneLightingStats 인터페이스에 onCount/onRate 추가됨 (위 정의 참조)

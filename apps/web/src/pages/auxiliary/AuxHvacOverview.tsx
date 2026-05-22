@@ -4,7 +4,7 @@ import { AlertCircle } from 'lucide-react';
 import PageHeader from '../../components/layout/PageHeader';
 import KpiCard from '../../components/ui/KpiCard';
 import TrendChart, { type TrendSeries } from '../../components/charts/TrendChart';
-import { getZones, getHvacTrend, ZONE_TYPE_LABEL, type Zone } from '../../services/auxiliary';
+import { getZones, getHvacTrend, getZoneIndoorTemps, ZONE_TYPE_LABEL, type Zone, type ZoneIndoorTemp } from '../../services/auxiliary';
 
 const HVAC_TREND_SERIES: TrendSeries[] = [
   { key: 'kwh', label: '공조 사용량 (kWh)', color: '#3B82F6', type: 'area', fillOpacity: 0.35 },
@@ -15,11 +15,17 @@ const HVAC_ZONE_TYPES = ['PRODUCTION', 'OFFICE', 'CORRIDOR', 'LOUNGE'] as const;
 // 'HH:mm' (현재 시각) — 빨간 수직선
 const currentTime = new Date().toTimeString().slice(0, 5);
 
-function ZoneCard({ zone }: { zone: Zone }) {
+function ZoneCard({ zone, temp }: { zone: Zone; temp?: number | null }) {
   const hvac = zone.hvacCount ?? 0;
   const capRT = zone.totalCapacityRt ?? 0;
   const kwh24 = zone.hvacKwh24h ?? 0;
   const hasHvac = hvac > 0;
+  // 온도 컬러: 너무 덥거나 추우면 경고
+  const tempColor =
+    temp == null ? 'text-gray-400'
+    : temp >= 28 ? 'text-[#E74C3C]'
+    : temp <= 16 ? 'text-[#3B82F6]'
+    : 'text-[#27AE60]';
   return (
     <div className="bg-white dark:bg-[#16213E] border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between mb-2">
@@ -32,7 +38,22 @@ function ZoneCard({ zone }: { zone: Zone }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-4 gap-2 mt-3 text-xs">
+      <div className="grid grid-cols-2 gap-2 mt-3 mb-2 p-2 rounded bg-gray-50 dark:bg-gray-800/40">
+        <div>
+          <div className="text-[10px] text-gray-400 uppercase">실내 온도</div>
+          <div className={`font-mono font-bold text-lg ${tempColor}`}>
+            {temp != null ? `${temp.toFixed(1)}°C` : '—'}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] text-gray-400 uppercase">24h kWh</div>
+          <div className={`font-mono font-bold text-lg ${kwh24 > 0 ? 'text-[#27AE60]' : 'text-gray-400'}`}>
+            {kwh24 > 0 ? kwh24.toFixed(0) : '—'}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 text-xs">
         <div>
           <div className="text-gray-400">면적</div>
           <div className="font-mono text-gray-700 dark:text-gray-200">
@@ -51,12 +72,6 @@ function ZoneCard({ zone }: { zone: Zone }) {
             {capRT > 0 ? capRT.toLocaleString() : '—'}
           </div>
         </div>
-        <div>
-          <div className="text-gray-400">24h kWh</div>
-          <div className={`font-mono font-semibold ${kwh24 > 0 ? 'text-[#27AE60]' : 'text-gray-400'}`}>
-            {kwh24 > 0 ? kwh24.toFixed(0) : '—'}
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -72,6 +87,18 @@ export default function AuxHvacOverview() {
     queryKey: ['aux', 'hvac-trend', 24],
     queryFn: () => getHvacTrend(24),
   });
+
+  const { data: temps = [] } = useQuery({
+    queryKey: ['aux', 'zone-indoor-temps'],
+    queryFn: getZoneIndoorTemps,
+    refetchInterval: 30_000, // 30초마다 자동 갱신
+  });
+
+  const tempByZone = useMemo(() => {
+    const m = new Map<string, number | null>();
+    temps.forEach(t => m.set(t.zoneId, t.temperatureC));
+    return m;
+  }, [temps]);
 
   const hvacZones = useMemo(
     () => zones.filter(z => HVAC_ZONE_TYPES.includes(z.zoneType as typeof HVAC_ZONE_TYPES[number])),
@@ -155,7 +182,7 @@ export default function AuxHvacOverview() {
         <div className="flex-1 flex items-center justify-center text-gray-400">불러오는 중...</div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-          {hvacZones.map(z => <ZoneCard key={z.id} zone={z} />)}
+          {hvacZones.map(z => <ZoneCard key={z.id} zone={z} temp={tempByZone.get(z.id)} />)}
         </div>
       )}
     </div>
