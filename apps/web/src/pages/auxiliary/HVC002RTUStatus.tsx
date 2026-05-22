@@ -30,8 +30,8 @@ export default function HVC002RTUStatus() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="RTU 평면도 상태 (HVC-002)"
-        description="HMGMA Slide 18·28 — Shop floor 평면도 + RTU 상태 (COOL/HEAT/ON/OFF) + TEMP 센서"
+        title="RTU 평면도 상태"
+        description="Shop floor 평면도 + RTU 상태 (COOL/HEAT/ON/OFF) + TEMP 센서 위치"
         breadcrumbs={[{ label: '부대설비' }, { label: '공조' }, { label: 'RTU 평면도 상태' }]}
         actions={
           <div className="flex gap-2">
@@ -80,7 +80,7 @@ export default function HVC002RTUStatus() {
       </div>
 
       <div className="mt-3 text-[11px] text-gray-500">
-        🎨 데모용 mock 데이터. SHOP/floor 정의 + RTU GPS 좌표 + 실시간 상태 태그 연결 시 정식 운영.
+        ※ 데모 데이터. Shop/floor 정의 + RTU 좌표 + 실시간 상태 태그 연결 시 정식 운영.
       </div>
     </div>
   );

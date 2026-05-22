@@ -19,9 +19,9 @@ export default function MON007FactoryMap() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="공장 평면도 (MON-007)"
-        description="HMGMA 컨셉 — 평면도 위 건물별 KPI 미니카드 + 7일 날씨 + RE100 진행률"
-        breadcrumbs={[{ label: '모니터링' }, { label: 'HMGMA 화면 모음' }, { label: '공장 평면도' }]}
+        title="공장 평면도"
+        description="공장 전체 평면도 위 건물별 KPI 미니카드 + 7일 날씨 + RE100 진행률"
+        breadcrumbs={[{ label: '모니터링' }, { label: '실시간 현황' }, { label: '공장 평면도' }]}
       />
 
       {/* 상단 — 7일 날씨 + RE100 */}
@@ -99,7 +99,7 @@ export default function MON007FactoryMap() {
       </div>
 
       <div className="mt-3 text-[11px] text-gray-500">
-        🎨 데모용 mock 데이터. 화성 PT4공장 도면 SVG + facilities 실시간 데이터 연결 시 정식 운영 가능.
+        ※ 데모 데이터. 화성 PT4공장 도면 SVG + facilities 실시간 데이터 연결 시 정식 운영.
       </div>
     </div>
   );

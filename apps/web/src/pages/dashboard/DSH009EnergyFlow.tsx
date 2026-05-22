@@ -155,9 +155,9 @@ export default function DSH009EnergyFlow() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="에너지 흐름도 (Integration Flow Chart)"
-        description="Supply/Convert 에너지 → Shop → 세부분기 매핑. 추가/수정/삭제 가능 (fems.energy_flows)"
-        breadcrumbs={[{ label: '대시보드' }, { label: '에너지 흐름도' }]}
+        title="에너지 흐름도"
+        description="공급/변환 에너지(Electricity/Gas/Water/Air) → Shop → 세부분기 매핑. 사용자가 직접 추가·수정·삭제 가능"
+        breadcrumbs={[{ label: '대시보드' }, { label: '에너지 흐름·추이' }, { label: '에너지 흐름도' }]}
         actions={
           <button
             onClick={onAdd}

@@ -22,9 +22,9 @@ export default function DSH010ShopIntegrated() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="Shop 통합 사용량 (DSH-010)"
-        description="HMGMA Slide 27 — Shop별 Electricity/Gas/Air/Water KPI + 용도별 사용량"
-        breadcrumbs={[{ label: '대시보드' }, { label: 'HMGMA 화면 모음' }, { label: 'Shop 통합 사용량' }]}
+        title="Shop 통합 사용량"
+        description="Shop별 Electricity/Gas/Air/Water KPI + 용도별 사용량 + Standby Power 추이"
+        breadcrumbs={[{ label: '대시보드' }, { label: 'Shop·리포트' }, { label: 'Shop 통합 사용량' }]}
         actions={
           <select
             value={shop}
@@ -108,7 +108,7 @@ export default function DSH010ShopIntegrated() {
       </div>
 
       <div className="mt-3 text-[11px] text-gray-500">
-        🎨 데모용 mock 데이터. tag_data_raw 활성화 후 실시간 집계 연동 가능.
+        ※ 데모 데이터. tag_data_raw 활성화 후 실시간 집계 연동 가능.
       </div>
     </div>
   );

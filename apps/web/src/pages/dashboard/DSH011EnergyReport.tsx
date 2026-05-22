@@ -40,9 +40,9 @@ export default function DSH011EnergyReport() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="에너지 리포트 (DSH-011)"
-        description="HMGMA Slide 29 — CO₂ / Working Hours / 생산량 / 단위 / Utility KPI + 월/일 표"
-        breadcrumbs={[{ label: '대시보드' }, { label: 'HMGMA 화면 모음' }, { label: '에너지 리포트' }]}
+        title="에너지 리포트"
+        description="CO₂ / Working Hours / 생산량 / 단위 / Utility KPI + 월/일 사용량 표"
+        breadcrumbs={[{ label: '대시보드' }, { label: 'Shop·리포트' }, { label: '에너지 리포트' }]}
       />
 
       {/* 상단 KPI 8종 */}
@@ -72,7 +72,7 @@ export default function DSH011EnergyReport() {
       </div>
 
       <div className="mt-3 text-[11px] text-gray-500">
-        🎨 데모용 mock 데이터. 운영 시 cagg_usage_1d 또는 별도 보고서 집계 API 연결.
+        ※ 데모 데이터. 운영 시 cagg_usage_1d 또는 별도 보고서 집계 API 연결.
       </div>
     </div>
   );

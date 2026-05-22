@@ -25,8 +25,8 @@ export default function LGT002LightingControl() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="조명 제어 평면도 (LGT-002)"
-        description="HMGMA Slide 22 — 평면도 회로 ON/OFF + 스케줄 팝업"
+        title="조명 제어 평면도"
+        description="평면도 회로 ON/OFF 상태 + 스케줄 설정 팝업"
         breadcrumbs={[{ label: '부대설비' }, { label: '조명' }, { label: '조명 제어' }]}
         actions={
           <select value={shop} onChange={e => setShop(e.target.value)} className="px-2 py-1 border rounded text-xs">
@@ -113,7 +113,7 @@ export default function LGT002LightingControl() {
       </Modal>
 
       <div className="mt-3 text-[11px] text-gray-500">
-        🎨 데모용 mock. fems.schedule_rules (targetType=LIGHTING) + control_commands 발행 연동 시 정식 동작.
+        ※ 데모 데이터. fems.schedule_rules (targetType=LIGHTING) + control_commands 발행 연동 시 정식 동작.
       </div>
     </div>
   );

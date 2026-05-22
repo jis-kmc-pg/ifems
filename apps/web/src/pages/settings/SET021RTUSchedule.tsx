@@ -24,8 +24,8 @@ export default function SET021RTUSchedule() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="RTU 운전 스케줄 (SET-021)"
-        description="HMGMA Slide 21 — 월간 알고리즘 적용 캘린더 + 등록/수정"
+        title="RTU 운전 스케줄"
+        description="월간 알고리즘 적용 캘린더 + 룰 등록·수정 (fems.schedule_rules · HVAC 타입)"
         breadcrumbs={[{ label: '설정' }, { label: '부대설비' }, { label: 'RTU 스케줄' }]}
       />
 

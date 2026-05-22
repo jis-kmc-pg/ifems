@@ -14,8 +14,8 @@ export default function HVC003RTUDetail() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="RTU 개별 제어 (HVC-003)"
-        description="HMGMA Slide 19 — RTU 다이어그램 + 모드/필터/컴프레서/온도 제어"
+        title="RTU 개별 제어"
+        description="RTU 다이어그램 + 모드 / 필터 / 컴프레서 / 토출온도 제어"
         breadcrumbs={[{ label: '부대설비' }, { label: '공조' }, { label: 'RTU 개별 제어' }]}
         actions={
           <div className="flex gap-2">
@@ -88,7 +88,7 @@ export default function HVC003RTUDetail() {
       </div>
 
       <div className="mt-3 text-[11px] text-gray-500">
-        🎨 데모용 mock 데이터. control_commands 발행 + BMS/DDC 게이트웨이 연동 시 실제 제어 가능.
+        ※ 데모 데이터. control_commands 발행 + BMS/DDC 게이트웨이 연동 시 실제 제어 가능.
       </div>
     </div>
   );
